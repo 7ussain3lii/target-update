@@ -1,6 +1,7 @@
 import calendar
 import base64
 import binascii
+import copy
 import csv
 import datetime as dt
 import hashlib
@@ -299,8 +300,29 @@ def dashboard(state, user, month):
     elapsed = today.day if month == today.strftime('%Y-%m') else (days if month < today.strftime('%Y-%m') else 0)
     result = {'me':public_user(user),'agents':agents,'month':month,'days':days,'elapsed':elapsed,
               'storage':'Supabase' if os.environ.get('SUPABASE_URL') else 'Local prototype'}
+    # Keep historical data scoped to the user's authorized accounts.
+    year,mon=map(int,month.split('-'))
+    periods=[]
+    for offset in range(5,-1,-1):
+        index=year*12+mon-1-offset
+        periods.append(f'{(index//12):04d}-{index%12+1:02d}')
+    history=[]
+    for reporting_month in periods:
+        totals={}
+        for agent in visible:
+            totals[agent['username']]={'POST':0,'BB':0,'MUL':0}
+        for entry in state['entries']:
+            if entry['agent'] not in totals or not entry['date'].startswith(reporting_month) or entry['points'] is None:
+                continue
+            key=entry['category'] if entry['category'] in ('POST','BB') else 'MUL'
+            totals[entry['agent']][key]+=entry['points']
+        history.append({'month':reporting_month,'agents':totals})
+    result['history']=history
     if admin:
-        result.update(rules=state['rules'],imports=state['imports'][:50],audit=state['audit'][-30:][::-1])
+        backup=state.get('last_import_backup')
+        result.update(rules=state['rules'],imports=state['imports'][:50],audit=state['audit'][-30:][::-1],
+                      import_restore=({'id':backup['id'],'at':backup['at'],'files':backup['files']}
+                                      if backup else None))
     return result
 
 
@@ -346,7 +368,21 @@ def action(state, path, data, token):
     if user['role'] != 'admin':
         raise Problem('Administrator access required.',403)
     if path == 'import':
+        before_entries=copy.deepcopy(state['entries'])
+        before_imports=copy.deepcopy(state['imports'])
         result = import_csv(state,data.get('files'),user['username'])
+        state['last_import_backup']={
+            'id':secrets.token_hex(8),'at':dt.datetime.now(TZ).isoformat(),
+            'files':[r['file'] for r in result],
+            'entries':before_entries,'imports':before_imports}
+    elif path == 'undo-import':
+        backup=state.get('last_import_backup')
+        if not backup or data.get('backup_id') != backup['id']:
+            raise Problem('The available import backup has changed. Refresh and review again.')
+        state['entries']=backup['entries']
+        state['imports']=backup['imports']
+        state.pop('last_import_backup',None)
+        result={'ok':True,'restored':True}
     elif path == 'targets-preview':
         return monthly_target_upload(state,data),200,None
     elif path == 'targets-import':
