@@ -202,6 +202,33 @@ class Workflow(unittest.TestCase):
         self.assertEqual(state['targets']['2026-11']['B000884']['MUL'],810)
         self.assertNotIn('2026-12',state['targets'])
 
+    def test_scoped_history_and_recoverable_csv_import(self):
+        state=core.seed()
+        state['entries']=[
+            {'id':'old1','agent':'BF01458','date':'2026-10-10','category':'POST','points':2},
+            {'id':'old2','agent':'B000597','date':'2026-10-10','category':'BB','points':3}]
+        own=core.dashboard(state,state['users']['BF01458'],'2026-11')
+        self.assertEqual(own['history'][-2]['agents'],{'BF01458':{'POST':2,'BB':0,'MUL':0}})
+        self.assertNotIn('import_restore',own)
+        token='test-restoration'
+        state['sessions'][core.hashlib.sha256(token.encode()).hexdigest()]={'username':'B000884','expires':time.time()+100}
+        state['users']['B000884']['must_change']=False
+        files=[{'name':'TLS_REPORT.csv','content':
+                'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+                'new,7,01-NOV-26,BF01458,Telesales,MBB,11\n'}]
+        result,status,_=core.action(state,'import',{'files':files},token)
+        self.assertEqual(status,200)
+        self.assertEqual(len(state['entries']),3)
+        backup=core.dashboard(state,state['users']['B000884'],'2026-11')['import_restore']
+        self.assertIsNotNone(backup)
+        with self.assertRaises(core.Problem):
+            core.action(state,'undo-import',{'backup_id':'wrong'},token)
+        result,status,_=core.action(state,'undo-import',{'backup_id':backup['id']},token)
+        self.assertEqual(status,200)
+        self.assertEqual([e['id'] for e in state['entries']],['old1','old2'])
+        self.assertEqual(state['imports'],[])
+        self.assertIsNone(core.dashboard(state,state['users']['B000884'],'2026-11')['import_restore'])
+
 
 if __name__=='__main__':
     os.environ.setdefault('TARGET_ADMIN_PIN','6789')
