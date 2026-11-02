@@ -87,6 +87,8 @@ class handler(BaseHTTPRequestHandler):
             for _ in range(4):
                 revision,state = self.state()
                 result,status,token = core.action(state,path,data,self.token())
+                if path == 'targets-preview':
+                    return self.send(status,result,token)
                 try:
                     store.write(revision,state)
                     return self.send(status,result,token)
