@@ -178,6 +178,10 @@ class Workflow(unittest.TestCase):
               'xl/_rels/workbook.xml.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
               'xl/worksheets/sheet1.xml':'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>TABS</t></is></c><c r="B1" t="inlineStr"><is><t>POST</t></is></c><c r="C1" t="inlineStr"><is><t>BB</t></is></c><c r="D1" t="inlineStr"><is><t>BH</t></is></c><c r="E1" t="inlineStr"><is><t>Expats</t></is></c><c r="F1" t="inlineStr"><is><t>insurance</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>B000884</t></is></c><c r="D2"><v>450</v></c><c r="E2"><v>360</v></c><c r="F2"><v>130</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>BF01458</t></is></c><c r="B3"><v>18</v></c><c r="C3"><v>12</v></c></row></sheetData></worksheet>'
             }
+            files['xl/worksheets/sheet1.xml']=files['xl/worksheets/sheet1.xml'].replace(
+                '</sheetData>',
+                '<row r="4"><c r="A4" t="inlineStr"><is><t>BF01411</t></is></c>'
+                '<c r="F4"><v>130</v></c></row></sheetData>')
             buffer=io.BytesIO()
             with zipfile.ZipFile(buffer,'w') as archive:
                 for name,data in files.items():archive.writestr(name,data)
