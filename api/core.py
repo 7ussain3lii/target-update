@@ -1,4 +1,6 @@
 import calendar
+import base64
+import binascii
 import csv
 import datetime as dt
 import hashlib
@@ -11,6 +13,7 @@ import pathlib
 import re
 import secrets
 import time
+import targets_xlsx
 from decimal import Decimal, InvalidOperation
 
 TZ = dt.timezone(dt.timedelta(hours=3))
@@ -112,6 +115,35 @@ def normalize_rules(state):
     for rule in state['rules']:
         if rule['rental'] is not None:
             rule['rental'] = money(rule['rental'])
+
+
+def monthly_target_upload(state, data, save=False):
+    month = period(data.get('month'))
+    encoded = data.get('content')
+    if not isinstance(encoded, str) or len(encoded) > 2_800_000:
+        raise Problem('Choose an XLSX target workbook under 2 MB.')
+    try:
+        content = base64.b64decode(encoded, validate=True)
+        sheet, rows = targets_xlsx.parse(content, month)
+    except (binascii.Error, targets_xlsx.WorkbookError) as error:
+        raise Problem(str(error) if isinstance(error, targets_xlsx.WorkbookError)
+                      else 'Invalid XLSX upload.')
+    digest = hashlib.sha256(content).hexdigest()
+    unknown = [row['username'] for row in rows if row['username'] not in state['users']]
+    existing = state['targets'].get(month,{})
+    changed = sum(existing.get(row['username']) != row['targets'] for row in rows)
+    preview = {'month':month,'sheet':sheet,'sha256':digest,'rows':rows,
+               'unknown':unknown,'changed':changed}
+    if save:
+        if data.get('expected_sha256') != digest:
+            raise Problem('The file changed after preview. Review it again.')
+        if unknown:
+            raise Problem('Unknown employee IDs: '+', '.join(unknown[:12]))
+        monthly = state['targets'].setdefault(month,{})
+        for row in rows:
+            monthly[row['username']] = row['targets']
+        return {'ok':True,'month':month,'updated':len(rows)}
+    return preview
 
 
 def subno_key(subno):
@@ -315,6 +347,10 @@ def action(state, path, data, token):
         raise Problem('Administrator access required.',403)
     if path == 'import':
         result = import_csv(state,data.get('files'),user['username'])
+    elif path == 'targets-preview':
+        return monthly_target_upload(state,data),200,None
+    elif path == 'targets-import':
+        result = monthly_target_upload(state,data,save=True)
     elif path == 'account':
         username = str(data.get('username','')).strip().upper()
         if not re.fullmatch(r'[A-Z0-9_-]{3,24}',username):
