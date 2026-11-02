@@ -49,8 +49,11 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
 
 ### Coaching and recovery
 
-- The Overview displays milestone/pace alerts, an administrator-only agent
-  leaderboard ranked by target achievement, and six months of POST/BB/MUL
+- The Overview separates POST/BB agents from MUL agents in coaching status,
+  team tables and the administrator-only leaderboard. A person's run rate is
+  projected month-end points divided by the applicable segment-group target.
+  Below 75% needs attention, 75–84.99% is Decent, 85–89.99% is Good,
+  and 90% or above is Excellent. The page also shows six months of POST/BB/MUL
   trend history. Agents can only see their own history.
 - Performance summaries are generated inside the app and can be copied for
   review. No messages or emails are sent automatically.
