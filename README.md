@@ -32,8 +32,13 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
 2. In **Team members**, review the Excel roster, set unique initial PINs, and
    activate each account. Agents must change their initial PIN on first sign-in.
 3. Select a reporting month and set targets. Workbook values are offered as a
-   template, never silently assigned to a month. Owner/leader aggregate targets
-   are excluded from the team total.
+   template, never silently assigned to a month. Alternatively, in **Upload
+   reports**, upload the monthly XLSX target workbook, review the preview, and
+   confirm the import. The sheet must match the reporting month (e.g. NOV).
+   POST and BB map directly, and BH + Expats maps to MUL; Insurance is ignored.
+   Unknown TABS IDs block the import until the employees are added. Only listed
+   employees' targets for the selected month are replaced. Owner/leader
+   aggregate targets are excluded from the team total.
 4. Upload the four supplied CSV report types in **Upload reports**. Import dates
    determine their month. Empty files with valid headers are supported.
 5. Inspect the import review for missing rules, unknown IDs, or malformed rows.
