@@ -229,6 +229,20 @@ class Workflow(unittest.TestCase):
         self.assertEqual(state['imports'],[])
         self.assertIsNone(core.dashboard(state,state['users']['B000884'],'2026-11')['import_restore'])
 
+    def test_reporting_day_uses_last_transaction_date(self):
+        state=core.seed()
+        state['entries']=[
+            {'agent':'BF01458','date':'2026-11-01','category':'POST','points':2},
+            {'agent':'B000597','date':'2026-11-03','category':'BB','points':1}]
+        for username in ('B000884','BF01458'):
+            view=core.dashboard(state,state['users'][username],'2026-11')
+            self.assertEqual(view['as_of_date'],'2026-11-03')
+            self.assertEqual(view['elapsed'],3)
+            self.assertEqual(view['days'],30)
+        empty=core.dashboard(state,state['users']['B000884'],'2026-12')
+        self.assertIsNone(empty['as_of_date'])
+        self.assertEqual(empty['elapsed'],0)
+
 
 if __name__=='__main__':
     os.environ.setdefault('TARGET_ADMIN_PIN','6789')
