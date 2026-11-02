@@ -21,7 +21,7 @@ import store
 
 class Workflow(unittest.TestCase):
     def setUp(self):
-        pins = patch.dict(os.environ, {'TARGET_ADMIN_PIN':'6789'})
+        pins = patch.dict(os.environ, {'TARGET_ADMIN_PIN':'6789','TARGET_SUBNO_HMAC_KEY':'test-only-dedup-secret'})
         pins.start()
         self.addCleanup(pins.stop)
 
@@ -29,7 +29,8 @@ class Workflow(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         sock=socket.socket();sock.bind(('127.0.0.1',0));cls.port=sock.getsockname()[1];sock.close()
-        env={**os.environ,'TARGET_ADMIN_PIN':'6789','PORT':str(cls.port),'TARGET_DB_PATH':cls.temp.name+'/test.db'}
+        env={**os.environ,'TARGET_ADMIN_PIN':'6789','TARGET_SUBNO_HMAC_KEY':'test-only-dedup-secret',
+             'PORT':str(cls.port),'TARGET_DB_PATH':cls.temp.name+'/test.db'}
         env.pop('SUPABASE_URL',None);env.pop('VERCEL',None)
         cls.server=subprocess.Popen([sys.executable,'api/index.py'],cwd=ROOT,env=env,stdout=subprocess.DEVNULL)
         cls.base='http://127.0.0.1:'+str(cls.port)+'/api/'
@@ -122,6 +123,26 @@ class Workflow(unittest.TestCase):
         self.assertEqual(by_name['TLS_MIG_REPOERT.csv']['excluded'],6)
         self.assertEqual(by_name['TLS_LOCK_REPOERT.csv']['excluded'],1)
         self.assertEqual(by_name['TLS_FAM_CHANGE.csv']['rows'],0)
+
+    def test_subno_dedup_across_reports_dates_and_reuploads(self):
+        state=core.seed()
+        locking='subno,contrno,transdate,tag_agent_id,tag_paydesk\n111,1,01-NOV-26,BF01458,Telesales\n222,2,03-NOV-26,BF01458,Telesales\n'
+        migration='SUBNO,contrno,transdate,tag_agent_id,TAG_PAY_DESK,FLAG\n111,3,01-NOV-26,BF01458,Telesales,Migration\n222,4,02-NOV-26,BF01458,Telesales,Upgrade\n'
+        files=[{'name':'TLS_LOCK_REPOERT.csv','content':locking},
+               {'name':'TLS_MIG_REPOERT.csv','content':migration}]
+        results=core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['entries']),2)
+        self.assertEqual({e['segment'] for e in state['entries']},{'Migration','Upgrade'})
+        self.assertEqual(results[1]['duplicates'],2)
+        self.assertEqual(sum(r['duplicates'] for r in core.import_csv(state,files,'B000884')),4)
+        self.assertEqual(len(state['entries']),2)
+        self.assertNotIn('111',json.dumps(state['entries']))
+        self.assertNotIn('222',json.dumps(state['entries']))
+
+        # Later-date imports cannot displace an earlier transaction.
+        later='subno,contrno,transdate,tag_agent_id,tag_paydesk\n222,5,04-NOV-26,BF01458,Telesales\n'
+        core.import_csv(state,[{'name':'TLS_LOCK_REPOERT.csv','content':later}],'B000884')
+        self.assertEqual(len(state['entries']),2)
 
     def test_effective_dates_archives_and_month_isolation(self):
         state=core.seed();core.normalize_rules(state)
