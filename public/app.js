@@ -84,35 +84,37 @@ document.addEventListener('click',async e=>{
  catch(err){toast(err.message);button.disabled=false;}
 },true);
 // Coaching insights are calculated from authorized dashboard data only.
-let leaderboardSegment='ALL', latestSummary='';
+let latestSummary='';
 function reportingPeople(){return current()?[current()]:dataAgents()}
+function performanceBand(rate){
+ if(rate===null)return {label:'Not started',css:'neutral'};
+ if(rate>=90)return {label:'Excellent',css:'excellent'};
+ if(rate>=85)return {label:'Good',css:'good'};
+ if(rate>=75)return {label:'Decent',css:'decent'};
+ return {label:'Needs attention',css:'attention'};
+}
+function performanceGroups(person,elapsed,days){
+ const postbb=(person.targets.POST||0)+(person.targets.BB||0);
+ const mul=person.targets.MUL??((person.targets.Migration||0)+(person.targets['Upgrade + Locking']||0));
+ return [{name:'POST & BB',goal:postbb,actual:person.points.POST+person.points.BB},
+         {name:'MUL',goal:mul,actual:person.points.MUL}]
+  .filter(g=>g.goal>0).map(g=>({...g,rate:elapsed?g.actual/elapsed*days/g.goal*100:null}));
+}
 function insightsPanel(){
  if(!state||!state.history)return '';
  const people=reportingPeople(),elapsed=state.elapsed,days=state.days;
- const alertRows=[];
- for(const person of people){
-  for(const segment of ['POST','BB','MUL']){
-   const target=person.targets[segment]??(segment==='MUL'?(person.targets.Migration||0)+(person.targets['Upgrade + Locking']||0):0);
-   if(!target)continue;
-   const actual=person.points[segment],achieved=actual/target*100;
-   const pace=elapsed?actual/target*days/elapsed*100:0;
-   let notice='';
-   if(achieved>=100)notice='100% target achieved';
-   else if(achieved>=85)notice='85% milestone reached';
-   else if(achieved>=75)notice='75% milestone reached';
-   else if(elapsed>0&&pace<100)notice='Below required pace';
-   if(notice)alertRows.push({person,segment,notice,achieved,pace});
-  }
- }
- alertRows.sort((a,b)=>(a.notice==='Below required pace'?0:1)-(b.notice==='Below required pace'?0:1)||a.pace-b.pace);
- const alerts=`<section class="panel"><div class="panel-head"><div><h2>Target alerts</h2><div class="sub">75%, 85%, 100% milestones and pacing warnings</div></div></div><div class="panel-body">${alertRows.length?alertRows.slice(0,12).map(a=>`<div class="insight-item"><div><strong>${esc(a.person.name)}</strong><small>${esc(a.segment)} · ${fmt(a.achieved)}% achieved</small></div><span class="status ${a.notice==='Below required pace'?'pending':''}">${esc(a.notice)}</span></div>`).join(''):'<p class="muted">No milestone or pacing alerts for this month.</p>'}</div></section>`;
- const segment=leaderboardSegment;
- const eligible=state.agents.filter(a=>a.role==='agent').map(a=>{
-  const score=segment==='ALL'?['POST','BB','MUL'].reduce((n,k)=>n+a.points[k],0):a.points[segment];
-  const goal=segment==='ALL'?['POST','BB','MUL'].reduce((n,k)=>n+(a.targets[k]||0),0):(a.targets[segment]||0);
-  return {a,score,goal,pct:goal?score/goal*100:-1};
- }).filter(x=>x.goal>0).sort((a,b)=>b.pct-a.pct||b.score-a.score);
- const leaderboard=state.me.role==='admin'&&!current()?`<section class="panel"><div class="panel-head"><div><h2>Agent leaderboard</h2><div class="sub">Ranked by target achievement percentage</div></div><select id="leaderboard-segment" aria-label="Leaderboard segment">${['ALL','POST','BB','MUL'].map(k=>`<option ${segment===k?'selected':''}>${k}</option>`).join('')}</select></div><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Agent</th><th>Points</th><th>Target</th><th>Achievement</th></tr></thead><tbody>${eligible.map((v,i)=>`<tr><td>${i+1}</td><td>${esc(v.a.name)}</td><td>${fmt(v.score)}</td><td>${fmt(v.goal)}</td><td><strong>${fmt(v.pct)}%</strong></td></tr>`).join('')||'<tr><td colspan="5">No targets assigned yet.</td></tr>'}</tbody></table></div></section>`:'';
+ const groups=['POST & BB','MUL'];
+ const coaching=groups.map(group=>{
+  const rows=people.flatMap(person=>performanceGroups(person,elapsed,days).filter(g=>g.name===group).map(g=>({person,...g})));
+  rows.sort((a,b)=>(a.rate??-1)-(b.rate??-1));
+  return `<div class="coaching-group"><h3>${group} agents <small>${rows.length}</small></h3>${rows.length?rows.map(r=>{const band=performanceBand(r.rate);return `<div class="insight-item"><div><strong>${esc(r.person.name)}</strong><small>${fmt(r.actual)} / ${fmt(r.goal)} points · Run rate ${r.rate===null?'—':fmt(r.rate)+'%'}</small></div><span class="performance-pill ${band.css}">${band.label}</span></div>`}).join(''):'<p class="muted">No agents with a target in this group.</p>'}</div>`;
+ }).join('');
+ const alerts=`<section class="panel"><div class="panel-head"><div><h2>Agent performance status</h2><div class="sub">Decent ≥75% · Good ≥85% · Excellent ≥90% run rate</div></div></div><div class="panel-body">${coaching}</div></section>`;
+ const leaderboard=state.me.role==='admin'&&!current()?`<section class="panel"><div class="panel-head"><div><h2>Agent leaderboard</h2><div class="sub">Separate rankings by projected run rate</div></div></div>${groups.map(group=>{
+   const eligible=state.agents.filter(a=>a.role==='agent').flatMap(a=>performanceGroups(a,elapsed,days).filter(g=>g.name===group).map(g=>({a,...g})));
+   eligible.sort((a,b)=>(b.rate??-1)-(a.rate??-1)||b.actual-a.actual);
+   return `<div class="coaching-group"><h3>${group} agents</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Agent</th><th>Points</th><th>Target</th><th>Run rate</th><th>Status</th></tr></thead><tbody>${eligible.map((v,i)=>{const band=performanceBand(v.rate);return `<tr><td>${i+1}</td><td>${esc(v.a.name)}</td><td>${fmt(v.actual)}</td><td>${fmt(v.goal)}</td><td><strong>${v.rate===null?'—':fmt(v.rate)+'%'}</strong></td><td><span class="performance-pill ${band.css}">${band.label}</span></td></tr>`}).join('')||'<tr><td colspan="6">No targets assigned.</td></tr>'}</tbody></table></div></div>`;
+  }).join('')}</section>`:'';
  const months=state.history.map(h=>{
   const ids=new Set(people.map(a=>a.username));
   const sums={POST:0,BB:0,MUL:0};
@@ -133,9 +135,19 @@ function insightsPanel(){
 }
 const originalOverview=overview;
 overview=function(){return originalOverview()+insightsPanel()};
+teamTable=function(){
+ const groups=['POST & BB','MUL'];
+ const agents=state.agents.filter(a=>a.role==='agent'&&(!search||(a.name+' '+a.username).toLowerCase().includes(search.toLowerCase())));
+ const tables=groups.map(group=>{
+  const rows=agents.flatMap(a=>performanceGroups(a,state.elapsed,state.days).filter(g=>g.name===group).map(g=>({a,...g})));
+  rows.sort((a,b)=>(b.rate??-1)-(a.rate??-1));
+  return `<section class="panel"><div class="panel-head"><div><h2>${group} team performance</h2><div class="sub">${rows.length} agents · Ranked by projected run rate</div></div></div><div class="table-wrap"><table><thead><tr><th>Agent</th><th>Actual points</th><th>Target</th><th>Run rate</th><th>Performance</th><th></th></tr></thead><tbody>${rows.map(r=>{const band=performanceBand(r.rate);return `<tr><td>${personCell(r.a)}</td><td>${fmt(r.actual)}</td><td>${fmt(r.goal)}</td><td>${r.rate===null?'—':fmt(r.rate)+'%'}</td><td><span class="performance-pill ${band.css}">${band.label}</span></td><td><button class="btn ghost" data-agent="${esc(r.a.username)}">View</button></td></tr>`}).join('')||'<tr><td colspan="6">No agents with a target in this group.</td></tr>'}</tbody></table></div></section>`;
+ }).join('');
+ const unassigned=agents.filter(a=>performanceGroups(a,state.elapsed,state.days).length===0);
+ return `<div class="team-groups"><div class="table-tools"><input class="search" id="search" placeholder="Search agents…" aria-label="Search agents" value="${esc(search)}"></div>${tables}${unassigned.length?`<div class="banner warn">${unassigned.length} agents have no targets assigned for ${esc(month)}. Set their targets to include them in the performance groups.</div>`:''}</div>`;
+};
 const uploadsWithTargets=uploadsPage;
 uploadsPage=function(){const backup=state?.import_restore;const protection=`<section class="panel"><div class="panel-head"><div><h2>Import recovery</h2><div class="sub">Undo the most recent CSV report upload if it was incorrect</div></div></div><div class="panel-body">${backup?`<p>Recoverable upload: ${esc(backup.files.join(', '))} · ${esc(new Date(backup.at).toLocaleString('en-GB',{timeZone:'Asia/Bahrain'}))}</p><button class="btn secondary" id="undo-last-import" data-backup-id="${esc(backup.id)}">Undo last CSV upload</button>`:'<p class="muted">No recent CSV upload is available to undo. The next upload will create a recovery snapshot.</p>'}</div></section>`;return protection+uploadsWithTargets()};
-document.addEventListener('change',e=>{if(e.target.id==='leaderboard-segment'){leaderboardSegment=e.target.value;render()}});
 document.addEventListener('click',async e=>{
  const copy=e.target.closest('#copy-performance-summary');
  if(copy){try{await navigator.clipboard.writeText(latestSummary);toast('Performance summary copied.')}catch{toast('Clipboard access unavailable. Select and copy the summary.')}return;}
