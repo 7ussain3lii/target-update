@@ -47,6 +47,19 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
 6. Add confirmed Migration, Upgrade, and Locking rules in **Campaign rules**.
    Saving or archiving a rule recalculates existing transactions.
 
+### Coaching and recovery
+
+- The Overview displays milestone/pace alerts, an administrator-only agent
+  leaderboard ranked by target achievement, and six months of POST/BB/MUL
+  trend history. Agents can only see their own history.
+- Performance summaries are generated inside the app and can be copied for
+  review. No messages or emails are sent automatically.
+- The Upload reports page offers an administrator-only undo for the most
+  recent CSV import. Each new CSV import replaces the previous one-step
+  recovery snapshot. Undo restores the previous transactions and import
+  history while preserving account and target changes made afterward.
+  This is not a substitute for external database backups.
+
 ### Confirmed business rules
 
 - Only `tag_pay_desk` / `tag_paydesk` equal to **Telesales** count, ignoring case
