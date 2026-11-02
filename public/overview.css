@@ -9,3 +9,32 @@
     grid-template-columns: 1fr;
   }
 }
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 22px;
+}
+.insights-grid .panel { min-width: 0; }
+.insight-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  font-size: 12px;
+}
+.insight-item:last-child { border-bottom: 0; }
+.insight-item strong, .insight-item small { display: block; }
+.insight-item small { color: var(--muted); margin-top: 4px; }
+.summary-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.85;
+}
+@media (max-width: 1000px) {
+  .insights-grid { grid-template-columns: 1fr; }
+}
