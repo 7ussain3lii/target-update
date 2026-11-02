@@ -1,0 +1,166 @@
+[
+  {
+    "username": "B000884",
+    "name": "Hussain Ali",
+    "segment": "MVPP & U&L",
+    "targets": {
+      "Migration": 360.0,
+      "Upgrade + Locking": 450.0
+    }
+  },
+  {
+    "username": "B000472",
+    "name": "Amina AlHaddad",
+    "segment": "Sales",
+    "targets": {
+      "POST": 159.0,
+      "BB": 106.0
+    }
+  },
+  {
+    "username": "BF01458",
+    "name": "Mohammed Alabdulla",
+    "segment": "Sales",
+    "targets": {
+      "POST": 18.0,
+      "BB": 12.0
+    }
+  },
+  {
+    "username": "B000597",
+    "name": "Mariam Khalil",
+    "segment": "Sales",
+    "targets": {
+      "POST": 18.0,
+      "BB": 12.0
+    }
+  },
+  {
+    "username": "BF01487",
+    "name": "AbdulRahman AlMahari",
+    "segment": "Sales",
+    "targets": {
+      "POST": 18.0,
+      "BB": 12.0
+    }
+  },
+  {
+    "username": "BF01464",
+    "name": "Husain Merza",
+    "segment": "Sales",
+    "targets": {
+      "POST": 18.0,
+      "BB": 12.0
+    }
+  },
+  {
+    "username": "BF01465",
+    "name": "Ebtesam Jaafar Nass",
+    "segment": "Sales",
+    "targets": {
+      "POST": 15.0,
+      "BB": 10.0
+    }
+  },
+  {
+    "username": "BF01492",
+    "name": "Maryam Radhi",
+    "segment": "Sales",
+    "targets": {
+      "POST": 13.2,
+      "BB": 8.8
+    }
+  },
+  {
+    "username": "BF01230",
+    "name": "Sayed Husain Adnan",
+    "segment": "Sales",
+    "targets": {
+      "POST": 17.4,
+      "BB": 11.600000000000001
+    }
+  },
+  {
+    "username": "BF01434",
+    "name": "Hasan Alnoami",
+    "segment": "Sales",
+    "targets": {
+      "POST": 18.0,
+      "BB": 12.0
+    }
+  },
+  {
+    "username": "BF01503",
+    "name": "Layal Humood",
+    "segment": "Sales",
+    "targets": {
+      "POST": 11.4,
+      "BB": 7.6000000000000005
+    }
+  },
+  {
+    "username": "BF01472",
+    "name": "Ghanem Almansoori",
+    "segment": "Sales",
+    "targets": {
+      "POST": 12.0,
+      "BB": 8.0
+    }
+  },
+  {
+    "username": "BF01338",
+    "name": "Ghada AlA'ali",
+    "segment": "U&L",
+    "targets": {
+      "Upgrade + Locking": 150.0
+    }
+  },
+  {
+    "username": "BF01325",
+    "name": "Sara  Alalawi",
+    "segment": "U&L",
+    "targets": {
+      "Upgrade + Locking": 150.0
+    }
+  },
+  {
+    "username": "BF01452",
+    "name": "Khalil Ramadhan",
+    "segment": "MVPP",
+    "targets": {
+      "Upgrade + Locking": 150.0
+    }
+  },
+  {
+    "username": "JSO1910",
+    "name": "Johir Md Salim",
+    "segment": "MVPP",
+    "targets": {
+      "Migration": 150.0
+    }
+  },
+  {
+    "username": "NSO1893",
+    "name": "Nauman Shah Shah",
+    "segment": "MVPP",
+    "targets": {
+      "Migration": 145.0
+    }
+  },
+  {
+    "username": "AMO1974",
+    "name": "Awais Saad Mahimkar",
+    "segment": "MVPP",
+    "targets": {
+      "Migration": 65.0
+    }
+  },
+  {
+    "username": "DVO1971",
+    "name": "Dipanshu Verma",
+    "segment": "MVPP",
+    "targets": {
+      "Migration": 0.0
+    }
+  }
+]
