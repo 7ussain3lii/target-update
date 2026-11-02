@@ -48,7 +48,8 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         try:
-            if parsed.path == '/api/state':
+            route = urllib.parse.parse_qs(parsed.query).get('path', [''])[0]
+            if parsed.path == '/api/state' or (parsed.path == '/api/index' and route == 'state'):
                 _,state = self.state()
                 user = core.authenticate(state,self.token())
                 month = urllib.parse.parse_qs(parsed.query).get('month',[core.dt.datetime.now(core.TZ).strftime('%Y-%m')])[0]
@@ -79,7 +80,10 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             if not isinstance(data,dict):
                 raise core.Problem('Expected a JSON object.')
-            path = urllib.parse.urlparse(self.path).path.removeprefix('/api/')
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path.removeprefix('/api/')
+            if path == 'index':
+                path = urllib.parse.parse_qs(parsed.query).get('path', [''])[0]
             for _ in range(4):
                 revision,state = self.state()
                 result,status,token = core.action(state,path,data,self.token())
