@@ -1,0 +1,11 @@
+.metrics.segment-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.segment-metrics .metric-foot {
+  margin-top: 12px;
+}
+@media (max-width: 800px) {
+  .metrics.segment-metrics {
+    grid-template-columns: 1fr;
+  }
+}
