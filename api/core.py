@@ -114,11 +114,31 @@ def normalize_rules(state):
             rule['rental'] = money(rule['rental'])
 
 
+def subno_key(subno):
+    """Stable, private match key; do not persist subscriber numbers."""
+    secret = os.environ.get('TARGET_SUBNO_HMAC_KEY')
+    if not secret:
+        raise Problem('Set TARGET_SUBNO_HMAC_KEY on the server before importing.', 503)
+    value = str(subno).strip()
+    if not value:
+        raise Problem('Missing SUBNO.')
+    return hmac.new(secret.encode(), value.encode(), hashlib.sha256).hexdigest()
+
+
+def preference(entry):
+    # An earlier transaction wins; on the same date Migration/Upgrade beats Locking.
+    return (entry['date'], 0 if entry['segment'] in ('Migration', 'Upgrade') else
+            1 if entry['segment'] == 'Locking' else 0)
+
+
 def import_csv(state, files, actor):
     if not isinstance(files, list) or not 1 <= len(files) <= 4:
         raise Problem('Select one to four CSV reports.')
+    if not os.environ.get('TARGET_SUBNO_HMAC_KEY'):
+        raise Problem('Set TARGET_SUBNO_HMAC_KEY on the server before importing.', 503)
     summaries = []
     known = {e['id'] for e in state['entries']}
+    by_subno = {e['subno_key']: e for e in state['entries'] if e.get('subno_key')}
     for file in files:
         name = file.get('name', '')
         sources = {'TLS_REPORT.csv':'sales', 'TLS_MIG_REPOERT.csv':'migration',
@@ -176,14 +196,24 @@ def import_csv(state, files, actor):
                 if fingerprint in known:
                     result['duplicates'] += 1
                     continue
+                match_key = subno_key(row.get('subno', ''))
                 entry = {'id':fingerprint,'source':source,'agent':username,'date':transaction_date,
-                         'segment':segment,'category':category,'rental':rental,'batch':result['id']}
+                         'segment':segment,'category':category,'rental':rental,'batch':result['id'],
+                         'subno_key':match_key}
+                previous = by_subno.get(match_key)
+                if previous:
+                    result['duplicates'] += 1
+                    if preference(entry) >= preference(previous):
+                        continue
+                    state['entries'].remove(previous)
+                    known.discard(previous['id'])
                 entry['points'] = score(entry,state['rules']) if source != 'family' else None
                 if entry['points'] is None:
                     result['pending'] += 1
                     result['issues'].append({'row':index,'reason':'Family VAT mapping needs confirmation' if source=='family' else 'No active scoring rule', 'agent':username})
                 state['entries'].append(entry)
                 known.add(fingerprint)
+                by_subno[match_key] = entry
                 result['imported'] += 1
             except Problem as error:
                 result['invalid'] += 1
