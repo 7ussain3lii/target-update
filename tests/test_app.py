@@ -1,4 +1,6 @@
 import copy
+import base64
+import io
 import http.cookiejar
 import json
 import os
@@ -9,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 import urllib.error
 import urllib.request
 from unittest.mock import patch
@@ -167,6 +170,33 @@ class Workflow(unittest.TestCase):
             self.assertEqual(store.read()[0],2)
         if old is None:os.environ.pop('TARGET_DB_PATH',None)
         else:os.environ['TARGET_DB_PATH']=old
+
+    def test_monthly_excel_targets_preview_and_commit(self):
+        def xlsx():
+            files={
+              'xl/workbook.xml':'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="NOV" r:id="rId1"/></sheets></workbook>',
+              'xl/_rels/workbook.xml.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+              'xl/worksheets/sheet1.xml':'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>TABS</t></is></c><c r="B1" t="inlineStr"><is><t>POST</t></is></c><c r="C1" t="inlineStr"><is><t>BB</t></is></c><c r="D1" t="inlineStr"><is><t>BH</t></is></c><c r="E1" t="inlineStr"><is><t>Expats</t></is></c><c r="F1" t="inlineStr"><is><t>insurance</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>B000884</t></is></c><c r="D2"><v>450</v></c><c r="E2"><v>360</v></c><c r="F2"><v>130</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>BF01458</t></is></c><c r="B3"><v>18</v></c><c r="C3"><v>12</v></c></row></sheetData></worksheet>'
+            }
+            buffer=io.BytesIO()
+            with zipfile.ZipFile(buffer,'w') as archive:
+                for name,data in files.items():archive.writestr(name,data)
+            return base64.b64encode(buffer.getvalue()).decode()
+        state=core.seed()
+        content=xlsx()
+        data={'month':'2026-11','content':content}
+        before=copy.deepcopy(state['targets'])
+        preview=core.monthly_target_upload(state,data)
+        self.assertEqual(state['targets'],before)
+        self.assertEqual(preview['rows'][0]['targets'],{'POST':0,'BB':0,'MUL':810})
+        self.assertEqual(preview['rows'][1]['targets'],{'POST':18,'BB':12,'MUL':0})
+        self.assertEqual(preview['unknown'],[])
+        with self.assertRaises(core.Problem):
+            core.monthly_target_upload(state,{**data,'expected_sha256':'wrong'},save=True)
+        result=core.monthly_target_upload(state,{**data,'expected_sha256':preview['sha256']},save=True)
+        self.assertEqual(result['updated'],2)
+        self.assertEqual(state['targets']['2026-11']['B000884']['MUL'],810)
+        self.assertNotIn('2026-12',state['targets'])
 
 
 if __name__=='__main__':
