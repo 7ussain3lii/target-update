@@ -83,6 +83,65 @@ document.addEventListener('click',async e=>{
  try{const result=await api('targets-import',pendingTargetUpload);pendingTargetUpload=null;await refresh();toast(`${result.updated} employee targets saved for ${result.month}.`);}
  catch(err){toast(err.message);button.disabled=false;}
 },true);
+// Coaching insights are calculated from authorized dashboard data only.
+let leaderboardSegment='ALL', latestSummary='';
+function reportingPeople(){return current()?[current()]:dataAgents()}
+function insightsPanel(){
+ if(!state||!state.history)return '';
+ const people=reportingPeople(),elapsed=state.elapsed,days=state.days;
+ const alertRows=[];
+ for(const person of people){
+  for(const segment of ['POST','BB','MUL']){
+   const target=person.targets[segment]??(segment==='MUL'?(person.targets.Migration||0)+(person.targets['Upgrade + Locking']||0):0);
+   if(!target)continue;
+   const actual=person.points[segment],achieved=actual/target*100;
+   const pace=elapsed?actual/target*days/elapsed*100:0;
+   let notice='';
+   if(achieved>=100)notice='100% target achieved';
+   else if(achieved>=85)notice='85% milestone reached';
+   else if(achieved>=75)notice='75% milestone reached';
+   else if(elapsed>0&&pace<100)notice='Below required pace';
+   if(notice)alertRows.push({person,segment,notice,achieved,pace});
+  }
+ }
+ alertRows.sort((a,b)=>(a.notice==='Below required pace'?0:1)-(b.notice==='Below required pace'?0:1)||a.pace-b.pace);
+ const alerts=`<section class="panel"><div class="panel-head"><div><h2>Target alerts</h2><div class="sub">75%, 85%, 100% milestones and pacing warnings</div></div></div><div class="panel-body">${alertRows.length?alertRows.slice(0,12).map(a=>`<div class="insight-item"><div><strong>${esc(a.person.name)}</strong><small>${esc(a.segment)} · ${fmt(a.achieved)}% achieved</small></div><span class="status ${a.notice==='Below required pace'?'pending':''}">${esc(a.notice)}</span></div>`).join(''):'<p class="muted">No milestone or pacing alerts for this month.</p>'}</div></section>`;
+ const segment=leaderboardSegment;
+ const eligible=state.agents.filter(a=>a.role==='agent').map(a=>{
+  const score=segment==='ALL'?['POST','BB','MUL'].reduce((n,k)=>n+a.points[k],0):a.points[segment];
+  const goal=segment==='ALL'?['POST','BB','MUL'].reduce((n,k)=>n+(a.targets[k]||0),0):(a.targets[segment]||0);
+  return {a,score,goal,pct:goal?score/goal*100:-1};
+ }).filter(x=>x.goal>0).sort((a,b)=>b.pct-a.pct||b.score-a.score);
+ const leaderboard=state.me.role==='admin'&&!current()?`<section class="panel"><div class="panel-head"><div><h2>Agent leaderboard</h2><div class="sub">Ranked by target achievement percentage</div></div><select id="leaderboard-segment" aria-label="Leaderboard segment">${['ALL','POST','BB','MUL'].map(k=>`<option ${segment===k?'selected':''}>${k}</option>`).join('')}</select></div><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Agent</th><th>Points</th><th>Target</th><th>Achievement</th></tr></thead><tbody>${eligible.map((v,i)=>`<tr><td>${i+1}</td><td>${esc(v.a.name)}</td><td>${fmt(v.score)}</td><td>${fmt(v.goal)}</td><td><strong>${fmt(v.pct)}%</strong></td></tr>`).join('')||'<tr><td colspan="5">No targets assigned yet.</td></tr>'}</tbody></table></div></section>`:'';
+ const months=state.history.map(h=>{
+  const ids=new Set(people.map(a=>a.username));
+  const sums={POST:0,BB:0,MUL:0};
+  for(const [id,points] of Object.entries(h.agents))if(ids.has(id))for(const key of Object.keys(sums))sums[key]+=points[key]||0;
+  return {month:h.month,...sums};
+ });
+ const trends=`<section class="panel"><div class="panel-head"><div><h2>Performance trends</h2><div class="sub">Six-month segment comparison · confirmed points</div></div></div><div class="table-wrap"><table><thead><tr><th>Month</th><th>POST</th><th>BB</th><th>MUL</th></tr></thead><tbody>${months.map(v=>`<tr><td>${esc(v.month)}</td><td>${fmt(v.POST)}</td><td>${fmt(v.BB)}</td><td>${fmt(v.MUL)}</td></tr>`).join('')}</tbody></table></div></section>`;
+ const monthLabel=new Date(month+'-01T12:00:00').toLocaleDateString('en',{month:'long',year:'numeric'});
+ const summaryRows=['POST','BB','MUL'].map(k=>{
+  const actual=people.reduce((n,a)=>n+a.points[k],0);
+  const target=people.reduce((n,a)=>n+(a.targets[k]??(k==='MUL'?(a.targets.Migration||0)+(a.targets['Upgrade + Locking']||0):0)),0);
+  const projected=elapsed?actual/elapsed*days:null;
+  return `${k}: ${fmt(actual)} / ${target?fmt(target):'no'} target; projected ${projected===null?'N/A':fmt(projected)} points; run rate ${target&&projected!==null?fmt(projected/target*100)+'%':'N/A'}.`;
+ });
+ latestSummary=`${current()?current().name:'Telesales team'} · ${monthLabel}\n${summaryRows.join('\n')}\nBased on ${elapsed} of ${days} calendar days in Bahrain. Figures are provisional pending validation.`;
+ const summaries=`<section class="panel"><div class="panel-head"><div><h2>Performance summary</h2><div class="sub">Review and copy a month-to-date update</div></div><button class="btn ghost" id="copy-performance-summary">Copy summary</button></div><div class="panel-body"><pre class="summary-text">${esc(latestSummary)}</pre></div></section>`;
+ return `<div class="insights-grid">${alerts}${leaderboard}${trends}${summaries}</div>`;
+}
+const originalOverview=overview;
+overview=function(){return originalOverview()+insightsPanel()};
+const uploadsWithTargets=uploadsPage;
+uploadsPage=function(){const backup=state?.import_restore;const protection=`<section class="panel"><div class="panel-head"><div><h2>Import recovery</h2><div class="sub">Undo the most recent CSV report upload if it was incorrect</div></div></div><div class="panel-body">${backup?`<p>Recoverable upload: ${esc(backup.files.join(', '))} · ${esc(new Date(backup.at).toLocaleString('en-GB',{timeZone:'Asia/Bahrain'}))}</p><button class="btn secondary" id="undo-last-import" data-backup-id="${esc(backup.id)}">Undo last CSV upload</button>`:'<p class="muted">No recent CSV upload is available to undo. The next upload will create a recovery snapshot.</p>'}</div></section>`;return protection+uploadsWithTargets()};
+document.addEventListener('change',e=>{if(e.target.id==='leaderboard-segment'){leaderboardSegment=e.target.value;render()}});
+document.addEventListener('click',async e=>{
+ const copy=e.target.closest('#copy-performance-summary');
+ if(copy){try{await navigator.clipboard.writeText(latestSummary);toast('Performance summary copied.')}catch{toast('Clipboard access unavailable. Select and copy the summary.')}return;}
+ const undo=e.target.closest('#undo-last-import');
+ if(undo){e.preventDefault();e.stopImmediatePropagation();if(!confirm('Undo the most recent CSV upload? This restores the previous transaction data and import history.'))return;undo.disabled=true;try{await api('undo-import',{backup_id:undo.dataset.backupId});await refresh();toast('Previous transactions restored.')}catch(err){toast(err.message);undo.disabled=false;}}
+},true);
 refresh();
 // Refresh visible dashboards without interrupting data entry or open dialogs.
 setInterval(()=>{if(state&&!state.change_required&&view==='overview'&&!document.hidden&&!$('#modal').open&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))refresh()},30000);
