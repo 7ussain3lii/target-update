@@ -57,7 +57,8 @@ class handler(BaseHTTPRequestHandler):
                     return self.send(200,{'me':core.public_user(user),'change_required':True})
                 return self.send(200,core.dashboard(state,user,month))
             files = {'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
-                     '/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css')}
+                     '/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css'),
+                     '/overview.css':('overview.css','text/css')}
             if parsed.path not in files:
                 return self.send(404,{'error':'Not found.'})
             name,mime = files[parsed.path]
