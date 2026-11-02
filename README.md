@@ -78,7 +78,10 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
   repeated uploads. Earliest transaction date wins; on the same date,
   Migration/Upgrade takes priority over Locking. Other same-date ties retain
   the existing record. General corrections/reversals are not supported.
-- Run rate uses elapsed calendar days in Bahrain time and actual month length.
+- Run rate uses the day of the latest imported transaction in the selected
+  reporting month as the elapsed calendar-day cutoff, with the actual month
+  length as the denominator. Reports are typically uploaded the following day.
+  Months without transactions have no projection yet.
 - Unknown IDs are rejected with a review entry. Missing scoring rules produce
   pending transactions, excluded from points until a confirmed rule is added.
 
