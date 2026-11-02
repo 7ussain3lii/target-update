@@ -12,6 +12,7 @@ Requires Python 3.12+. No package installation or build step is needed.
 cd /workspace/target-update
 read -rsp 'Initial admin PIN: ' TARGET_ADMIN_PIN; echo
 export TARGET_ADMIN_PIN
+export TARGET_SUBNO_HMAC_KEY='replace-with-a-long-random-private-secret'
 python3 api/index.py
 ```
 
@@ -51,9 +52,10 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
 - Agents see Migration + Upgrade + Locking as **MUL**. Leader views show Migration
   and Upgrade + Locking separately. Agents and leaders can read only their own
   results. Only B000884 can read all results or change reports/accounts/rules/targets.
-- Exact normalized duplicate rows in the same report type are skipped, including
-  repeated uploads. Corrected rows are not automatically substituted for prior
-  rows: this prototype does not yet provide a correction/reversal workflow.
+- Only one Telesales transaction is kept for each SUBNO across report types and
+  repeated uploads. Earliest transaction date wins; on the same date,
+  Migration/Upgrade takes priority over Locking. Other same-date ties retain
+  the existing record. General corrections/reversals are not supported.
 - Run rate uses elapsed calendar days in Bahrain time and actual month length.
 - Unknown IDs are rejected with a review entry. Missing scoring rules produce
   pending transactions, excluded from points until a confirmed rule is added.
@@ -75,8 +77,10 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
 Access is enforced in the API, not just hidden in the UI. Agent requests return
 only their own dashboard; they receive no team roster, imports, rules, or audit
 logs. Customer numbers and contract identifiers are used to fingerprint rows in
-memory; stored transaction records contain a SHA-256 fingerprint, agent, date,
-category, rental and score, with no raw subscriber numbers.
+memory; stored transactions contain a SHA-256 row fingerprint and keyed
+HMAC-SHA256 SUBNO matching key, agent, date, category, rental and score, with
+no raw subscriber numbers. Keep TARGET_SUBNO_HMAC_KEY secret and stable.
+Rotating it requires re-keying existing transaction match keys.
 
 PINs use salted scrypt hashes. Eight-hour opaque sessions are stored as hashes
 and sent via HttpOnly/SameSite=Strict cookies (Secure on Vercel). Five failed
@@ -101,7 +105,8 @@ product grows. Concurrent writes use revision checks and retry on conflict.
    public static files and `api/index.py` are used. No frontend build is required.
 4. Configure these **server-only** environment variables through Vercel settings:
    `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TARGET_ADMIN_PIN` (initialization
-   only). Never prefix the key with `PUBLIC_` or expose it to JavaScript.
+   only), and `TARGET_SUBNO_HMAC_KEY` (long, random and stable).
+   Never prefix secret keys with `PUBLIC_` or expose them to JavaScript.
 5. Deploy, sign in, replace the initial PIN, then activate accounts, set targets,
    and upload reports. Local SQLite data is not automatically migrated.
 6. Verify real remote persistence across deployment/restarts and the access tests
