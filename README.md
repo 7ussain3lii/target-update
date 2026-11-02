@@ -35,8 +35,9 @@ not survive an environment snapshot. Preserve `.data` to retain local changes.
    template, never silently assigned to a month. Alternatively, in **Upload
    reports**, upload the monthly XLSX target workbook, review the preview, and
    confirm the import. The sheet must match the reporting month (e.g. NOV).
-   POST and BB map directly, and BH + Expats maps to MUL; Insurance is ignored.
-   Unknown TABS IDs block the import until the employees are added. Only listed
+   POST and BB map directly, and BH + Expats maps to MUL; Insurance is ignored
+   and insurance-only employees are skipped. Unknown TABS IDs for included
+   employees block the import until the employees are added. Only listed
    employees' targets for the selected month are replaced. Owner/leader
    aggregate targets are excluded from the team total.
 4. Upload the four supplied CSV report types in **Upload reports**. Import dates
