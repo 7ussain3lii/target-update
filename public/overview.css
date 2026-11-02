@@ -28,6 +28,18 @@
 .insight-item:last-child { border-bottom: 0; }
 .insight-item strong, .insight-item small { display: block; }
 .insight-item small { color: var(--muted); margin-top: 4px; }
+.coaching-group { padding: 15px 20px; border-top: 1px solid var(--line); }
+.coaching-group:first-child { border-top: 0; }
+.coaching-group h3 { font-size: 13px; margin: 0 0 12px; color: var(--ink); }
+.coaching-group h3 small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.performance-pill { display: inline-block; border-radius: 5px; padding: 5px 8px; font-size: 11px; font-weight: 650; white-space: nowrap; }
+.performance-pill.attention { color: #a13f2b; background: #fce9e3; }
+.performance-pill.decent { color: #896417; background: #fff4d6; }
+.performance-pill.good { color: #245f89; background: #e6f1f8; }
+.performance-pill.excellent { color: #1e6a46; background: #dff4e6; }
+.performance-pill.neutral { color: #67736f; background: #ecf0ed; }
+.team-groups { display: grid; gap: 18px; margin-top: 20px; }
+.team-groups > .table-tools { justify-content: flex-end; }
 .summary-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
