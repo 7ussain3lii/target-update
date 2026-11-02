@@ -123,6 +123,10 @@ def parse(data, month):
         bb=number(values.get(headers['BB']),rownum,'BB')
         bh=number(values.get(headers['BH']),rownum,'BH')
         expats=number(values.get(headers['EXPATS']),rownum,'Expats')
+        insurance=number(values.get(headers['INSURANCE']),rownum,'Insurance') if 'INSURANCE' in headers else Decimal(0)
+        # An insurance-only employee is outside the currently tracked segments.
+        if insurance > 0 and post == bb == bh == expats == 0:
+            continue
         if len(parsed)>=300:
             raise WorkbookError('Maximum 300 employees per target workbook.')
         parsed.append({'username':username,'targets':{
