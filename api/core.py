@@ -295,10 +295,14 @@ def dashboard(state, user, month):
         points['Upgrade + Locking'] = points['Upgrade'] + points['Locking']
         agents.append({**public_user(agent), 'points':points,'targets':targets,'pending':pending,'daily':daily,
                        'template':agent['targets'] if admin else None})
-    today = dt.datetime.now(TZ).date()
     days = calendar.monthrange(int(month[:4]),int(month[5:]))[1]
-    elapsed = today.day if month == today.strftime('%Y-%m') else (days if month < today.strftime('%Y-%m') else 0)
+    # Sales reports arrive one day late. Use the latest imported transaction
+    # date for the reporting month as a common cutoff for every agent.
+    as_of_date = max((entry['date'] for entry in state['entries']
+                      if entry['date'].startswith(month)), default=None)
+    elapsed = int(as_of_date[-2:]) if as_of_date else 0
     result = {'me':public_user(user),'agents':agents,'month':month,'days':days,'elapsed':elapsed,
+              'as_of_date':as_of_date,
               'storage':'Supabase' if os.environ.get('SUPABASE_URL') else 'Local prototype'}
     # Keep historical data scoped to the user's authorized accounts.
     year,mon=map(int,month.split('-'))
