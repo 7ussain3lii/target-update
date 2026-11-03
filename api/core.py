@@ -272,60 +272,124 @@ def public_user(user):
     return {k:user[k] for k in ('username','name','role','active','segment','must_change')}
 
 
+def agent_team(agent):
+    """Sales agents report to Amina; MVPP/U&L agents report to Hussain."""
+    return 'Sales' if agent.get('segment') == 'Sales' else 'MUL'
+
+
+def report_targets(agent, monthly):
+    """Normalize an agent's monthly targets into separate reporting activities."""
+    if not monthly:
+        return {}
+    result = {'POST': float(monthly.get('POST', 0)),
+              'BB': float(monthly.get('BB', 0))}
+    if agent_team(agent) == 'MUL':
+        migration = monthly.get('Migration')
+        upgrades = monthly.get('Upgrade + Locking')
+        if migration is None and upgrades is None and 'MUL' in monthly:
+            # The source workbook combines MUL. Each roster agent has one
+            # designated target activity; do not use leader workbook totals.
+            template = agent.get('targets', {})
+            if 'Migration' in template and 'Upgrade + Locking' not in template:
+                migration, upgrades = monthly['MUL'], 0
+            elif 'Upgrade + Locking' in template and 'Migration' not in template:
+                migration, upgrades = 0, monthly['MUL']
+        if migration is not None:
+            result['Migration'] = float(migration)
+        if upgrades is not None:
+            result['Upgrade + Locking'] = float(upgrades)
+    return result
+
+
 def dashboard(state, user, month):
     period(month)
     admin = user['role'] == 'admin'
-    visible = list(state['users'].values()) if admin else [user]
-    # Aggregate leader targets in Excel are not counted a second time in team totals.
-    agents = []
-    for agent in visible:
-        targets = state['targets'].get(month, {}).get(agent['username'], {})
-        points = {k:0 for k in ('POST','BB','Migration','Upgrade','Locking')}
-        pending = 0
-        daily = {}
+    leader_id = user['username'] if user['role'] in ('admin', 'leader') else None
+    all_agents = [a for a in state['users'].values() if a['role'] == 'agent']
+    monthly = state['targets'].get(month, {})
+    zero_points = ('POST', 'BB', 'Migration', 'Upgrade', 'Locking')
+    as_of_date = max((e['date'] for e in state['entries']
+                      if e['date'].startswith(month)), default=None)
+    days = calendar.monthrange(int(month[:4]), int(month[5:]))[1]
+    elapsed = int(as_of_date[-2:]) if as_of_date else 0
+
+    def sales_snapshot(agent, reporting_month):
+        points = {key: 0 for key in zero_points}
+        pending, daily = 0, {}
         for entry in state['entries']:
-            if entry['agent'] != agent['username'] or not entry['date'].startswith(month):
+            if entry['agent'] != agent['username'] or not entry['date'].startswith(reporting_month):
                 continue
             if entry['points'] is None:
                 pending += 1
             else:
                 points[entry['category']] += entry['points']
-                daily[entry['date']] = daily.get(entry['date'],0) + entry['points']
-        points['MUL'] = points['Migration'] + points['Upgrade'] + points['Locking']
+                daily[entry['date']] = daily.get(entry['date'], 0) + entry['points']
         points['Upgrade + Locking'] = points['Upgrade'] + points['Locking']
-        agents.append({**public_user(agent), 'points':points,'targets':targets,'pending':pending,'daily':daily,
-                       'template':agent['targets'] if admin else None})
-    days = calendar.monthrange(int(month[:4]),int(month[5:]))[1]
-    # Sales reports arrive one day late. Use the latest imported transaction
-    # date for the reporting month as a common cutoff for every agent.
-    as_of_date = max((entry['date'] for entry in state['entries']
-                      if entry['date'].startswith(month)), default=None)
-    elapsed = int(as_of_date[-2:]) if as_of_date else 0
-    result = {'me':public_user(user),'agents':agents,'month':month,'days':days,'elapsed':elapsed,
-              'as_of_date':as_of_date,
-              'storage':'Supabase' if os.environ.get('SUPABASE_URL') else 'Local prototype'}
-    # Keep historical data scoped to the user's authorized accounts.
-    year,mon=map(int,month.split('-'))
-    periods=[]
-    for offset in range(5,-1,-1):
-        index=year*12+mon-1-offset
-        periods.append(f'{(index//12):04d}-{index%12+1:02d}')
-    history=[]
-    for reporting_month in periods:
-        totals={}
-        for agent in visible:
-            totals[agent['username']]={'POST':0,'BB':0,'MUL':0}
-        for entry in state['entries']:
-            if entry['agent'] not in totals or not entry['date'].startswith(reporting_month) or entry['points'] is None:
-                continue
-            key=entry['category'] if entry['category'] in ('POST','BB') else 'MUL'
-            totals[entry['agent']][key]+=entry['points']
-        history.append({'month':reporting_month,'agents':totals})
-    result['history']=history
+        points['MUL'] = points['Migration'] + points['Upgrade + Locking']
+        return points, pending, daily
+
+    def leader_snapshot(leader, reporting_month):
+        team = 'MUL' if leader['username'] == 'B000884' else 'Sales'
+        members = [a for a in all_agents if agent_team(a) == team]
+        sums = {key: 0 for key in zero_points}
+        sums.update({'Upgrade + Locking': 0, 'MUL': 0})
+        targets = {key: 0 for key in (('Migration', 'Upgrade + Locking')
+                                      if team == 'MUL' else ('POST', 'BB'))}
+        pending, daily = 0, {}
+        target_found = False
+        for agent in members:
+            points, unresolved, by_day = sales_snapshot(agent, reporting_month)
+            for key in sums:
+                sums[key] += points[key]
+            pending += unresolved
+            for day, value in by_day.items():
+                daily[day] = daily.get(day, 0) + value
+            member_targets = report_targets(agent, state['targets'].get(reporting_month, {}).get(agent['username'], {}))
+            for key in targets:
+                if key in member_targets:
+                    targets[key] += member_targets[key]
+                    target_found = True
+        # No phantom leader target when the agents' monthly targets are missing.
+        return sums, targets if target_found else {}, pending, daily
+
     if admin:
-        backup=state.get('last_import_backup')
-        result.update(rules=state['rules'],imports=state['imports'][:50],audit=state['audit'][-30:][::-1],
-                      import_restore=({'id':backup['id'],'at':backup['at'],'files':backup['files']}
+        visible = list(state['users'].values())
+    else:
+        visible = [user]
+    agents = []
+    for person in visible:
+        if person['username'] in ('B000884', 'B000472') and person['role'] in ('admin', 'leader'):
+            points, targets, pending, daily = leader_snapshot(person, month)
+        else:
+            points, pending, daily = sales_snapshot(person, month)
+            targets = report_targets(person, monthly.get(person['username'], {}))
+        agents.append({**public_user(person), 'points': points, 'targets': targets,
+                       'pending': pending, 'daily': daily,
+                       'template': person['targets'] if admin else None})
+
+    result = {'me': public_user(user), 'agents': agents, 'month': month,
+              'days': days, 'elapsed': elapsed, 'as_of_date': as_of_date,
+              'storage': 'Supabase' if os.environ.get('SUPABASE_URL') else 'Local prototype'}
+    year, mon = map(int, month.split('-'))
+    history = []
+    for offset in range(5, -1, -1):
+        index = year * 12 + mon - 1 - offset
+        reporting_month = f'{(index // 12):04d}-{index % 12 + 1:02d}'
+        totals = {}
+        for person in visible:
+            if person['username'] in ('B000884', 'B000472') and person['role'] in ('admin', 'leader'):
+                points = leader_snapshot(person, reporting_month)[0]
+            else:
+                points = sales_snapshot(person, reporting_month)[0]
+            totals[person['username']] = {key: points[key]
+                                          for key in ('POST', 'BB', 'MUL', 'Migration', 'Upgrade + Locking')}
+        history.append({'month': reporting_month, 'agents': totals})
+    result['history'] = history
+    if admin:
+        backup = state.get('last_import_backup')
+        result.update(rules=state['rules'], imports=state['imports'][:50],
+                      audit=state['audit'][-30:][::-1],
+                      import_restore=({'id': backup['id'], 'at': backup['at'], 'files': backup['files']}
                                       if backup else None))
     return result
 
