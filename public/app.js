@@ -94,6 +94,11 @@ function performanceBand(rate){
  return {label:'Needs attention',css:'attention'};
 }
 function performanceGroups(person,elapsed,days){
+ if(person.username==='B000884'||person.username==='B000472'){
+  const categories=person.username==='B000884'?['Migration','Upgrade + Locking']:['POST','BB'];
+  return categories.map(name=>({name,goal:person.targets[name]||0,actual:person.points[name]||0}))
+   .filter(g=>g.goal>0).map(g=>({...g,rate:elapsed?g.actual/elapsed*days/g.goal*100:null}));
+ }
  const postbb=(person.targets.POST||0)+(person.targets.BB||0);
  const mul=person.targets.MUL??((person.targets.Migration||0)+(person.targets['Upgrade + Locking']||0));
  return [{name:'POST & BB',goal:postbb,actual:person.points.POST+person.points.BB},
@@ -103,11 +108,11 @@ function performanceGroups(person,elapsed,days){
 function insightsPanel(){
  if(!state||!state.history)return '';
  const people=reportingPeople(),elapsed=state.elapsed,days=state.days;
- const groups=['POST & BB','MUL'];
+ const groups=current()&&(current().username==='B000884'||current().username==='B000472')?keys():['POST & BB','MUL'];
  const coaching=groups.map(group=>{
   const rows=people.flatMap(person=>performanceGroups(person,elapsed,days).filter(g=>g.name===group).map(g=>({person,...g})));
   rows.sort((a,b)=>(a.rate??-1)-(b.rate??-1));
-  return `<div class="coaching-group"><h3>${group} agents <small>${rows.length}</small></h3>${rows.length?rows.map(r=>{const band=performanceBand(r.rate);return `<div class="insight-item"><div><strong>${esc(r.person.name)}</strong><small>${fmt(r.actual)} / ${fmt(r.goal)} points · Run rate ${r.rate===null?'—':fmt(r.rate)+'%'}</small></div><span class="performance-pill ${band.css}">${band.label}</span></div>`}).join(''):'<p class="muted">No agents with a target in this group.</p>'}</div>`;
+  return `<div class="coaching-group"><h3>${esc(group)} performance <small>${rows.length}</small></h3>${rows.length?rows.map(r=>{const band=performanceBand(r.rate);return `<div class="insight-item"><div><strong>${esc(r.person.name)}</strong><small>${fmt(r.actual)} / ${fmt(r.goal)} points · Run rate ${r.rate===null?'—':fmt(r.rate)+'%'}</small></div><span class="performance-pill ${band.css}">${band.label}</span></div>`}).join(''):'<p class="muted">No agents with a target in this group.</p>'}</div>`;
  }).join('');
  const alerts=`<section class="panel"><div class="panel-head"><div><h2>Agent performance status</h2><div class="sub">Decent ≥75% · Good ≥85% · Excellent ≥90% run rate</div></div></div><div class="panel-body">${coaching}</div></section>`;
  const leaderboard=state.me.role==='admin'&&!current()?`<section class="panel"><div class="panel-head"><div><h2>Agent leaderboard</h2><div class="sub">Separate rankings by projected run rate</div></div></div>${groups.map(group=>{
