@@ -56,6 +56,19 @@ with tempfile.TemporaryDirectory() as temp:
             page.set_viewport_size({'width':1440,'height':1000})
             page.locator('[data-view="campaigns"]').click()
             assert page.locator('tbody tr').count()==22
+            # Editing a rule must submit even though its hidden input is named 'id'.
+            for rental in ('33.000', '66.000', '77.000'):
+                row=page.locator('tbody tr').filter(has=page.get_by_role('cell',name='Family',exact=True)).filter(has=page.get_by_role('cell',name=rental,exact=True))
+                row.get_by_role('button',name='Edit',exact=True).click()
+                page.get_by_label('Points',exact=True).fill('1')
+                page.get_by_role('button',name='Save changes',exact=True).click()
+                page.locator("#modal").wait_for(state="hidden",timeout=3000)
+                assert row.locator('td').nth(3).inner_text()=='1'
+            page.reload()
+            page.locator('[data-view="campaigns"]').click()
+            for rental in ('33.000', '66.000', '77.000'):
+                row=page.locator('tbody tr').filter(has=page.get_by_role('cell',name='Family',exact=True)).filter(has=page.get_by_role('cell',name=rental,exact=True))
+                assert row.locator('td').nth(3).inner_text()=='1'
             page.get_by_role('button',name='Archived',exact=True).click()
             assert page.locator('tbody tr').count()==5
             # Agent uses an independent browser context and receives only self data.
