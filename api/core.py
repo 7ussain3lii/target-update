@@ -169,9 +169,15 @@ def import_csv(state, files, actor):
         raise Problem('Select one to four CSV reports.')
     if not os.environ.get('TARGET_SUBNO_HMAC_KEY'):
         raise Problem('Set TARGET_SUBNO_HMAC_KEY on the server before importing.', 503)
+    # Each batch is a complete sales snapshot. Build it separately and publish
+    # only after validation; never merge with previously uploaded transactions.
     summaries = []
-    known = {e['id'] for e in state['entries']}
-    by_subno = {e['subno_key']: e for e in state['entries'] if e.get('subno_key')}
+    fresh_entries = []
+    known = set()
+    by_subno = {}
+    names = [file.get('name') for file in files]
+    if len(set(names)) != len(names):
+        raise Problem('Each report can be uploaded only once per batch.')
     for file in files:
         name = file.get('name', '')
         sources = {'TLS_REPORT.csv':'sales', 'TLS_MIG_REPOERT.csv':'migration',
@@ -238,13 +244,13 @@ def import_csv(state, files, actor):
                     result['duplicates'] += 1
                     if preference(entry) >= preference(previous):
                         continue
-                    state['entries'].remove(previous)
+                    fresh_entries.remove(previous)
                     known.discard(previous['id'])
                 entry['points'] = score(entry,state['rules']) if source != 'family' else None
                 if entry['points'] is None:
                     result['pending'] += 1
                     result['issues'].append({'row':index,'reason':'Family VAT mapping needs confirmation' if source=='family' else 'No active scoring rule', 'agent':username})
-                state['entries'].append(entry)
+                fresh_entries.append(entry)
                 known.add(fingerprint)
                 by_subno[match_key] = entry
                 result['imported'] += 1
@@ -252,9 +258,18 @@ def import_csv(state, files, actor):
                 result['invalid'] += 1
                 result['issues'].append({'row':index,'reason':error.message,'agent':username})
         result['issues'] = result['issues'][:100]
-        state['imports'].insert(0, result)
         summaries.append(result)
-    state['audit'].append({'at':dt.datetime.now(TZ).isoformat(),'actor':actor,'action':'Upload reports'})
+    if not fresh_entries:
+        raise Problem('No valid Telesales sales found in the new reports. Existing data was not changed.')
+    old_count = len(state['entries'])
+    state['entries'] = fresh_entries
+    # Retain upload history for audit and undo; no historical sales are counted.
+    for result in summaries:
+        result['replaced_previous_sales'] = old_count
+    state['imports'] = list(reversed(summaries)) + state['imports']
+    state['audit'].append({'at':dt.datetime.now(TZ).isoformat(),'actor':actor,
+                           'action':'Replace sales reports', 'old_records':old_count,
+                           'new_records':len(fresh_entries)})
     return summaries
 
 
