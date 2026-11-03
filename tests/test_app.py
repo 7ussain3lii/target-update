@@ -103,7 +103,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(result[0]['unknown_agents'],1)
         self.assertEqual([e['points'] for e in state['entries']],[1.5,3,1,None])
         self.assertEqual(result[1]['pending'],1)
-        self.assertEqual(core.import_csv(state,files,'B000884')[0]['duplicates'],3)
+        self.assertEqual(core.import_csv(state,files,'B000884')[0]['duplicates'],0)
         self.assertEqual(len(state['entries']),4)
         token='test';state['sessions'][core.hashlib.sha256(token.encode()).hexdigest()]={'username':'B000884','expires':time.time()+100}
         state['users']['B000884']['must_change']=False
@@ -137,15 +137,16 @@ class Workflow(unittest.TestCase):
         self.assertEqual(len(state['entries']),2)
         self.assertEqual({e['segment'] for e in state['entries']},{'Migration','Upgrade'})
         self.assertEqual(results[1]['duplicates'],2)
-        self.assertEqual(sum(r['duplicates'] for r in core.import_csv(state,files,'B000884')),4)
+        self.assertEqual(sum(r['duplicates'] for r in core.import_csv(state,files,'B000884')),2)
         self.assertEqual(len(state['entries']),2)
         self.assertNotIn('111',json.dumps(state['entries']))
         self.assertNotIn('222',json.dumps(state['entries']))
 
-        # Later-date imports cannot displace an earlier transaction.
+        # A new snapshot entirely replaces the previous transactions.
         later='subno,contrno,transdate,tag_agent_id,tag_paydesk\n222,5,04-NOV-26,BF01458,Telesales\n'
         core.import_csv(state,[{'name':'TLS_LOCK_REPOERT.csv','content':later}],'B000884')
-        self.assertEqual(len(state['entries']),2)
+        self.assertEqual(len(state['entries']),1)
+        self.assertEqual(state['entries'][0]['date'],'2026-11-04')
 
     def test_effective_dates_archives_and_month_isolation(self):
         state=core.seed();core.normalize_rules(state)
@@ -218,7 +219,8 @@ class Workflow(unittest.TestCase):
                 'new,7,01-NOV-26,BF01458,Telesales,MBB,11\n'}]
         result,status,_=core.action(state,'import',{'files':files},token)
         self.assertEqual(status,200)
-        self.assertEqual(len(state['entries']),3)
+        self.assertEqual(len(state['entries']),1)
+        self.assertEqual(state['entries'][0]['date'],'2026-11-01')
         backup=core.dashboard(state,state['users']['B000884'],'2026-11')['import_restore']
         self.assertIsNotNone(backup)
         with self.assertRaises(core.Problem):
@@ -228,6 +230,30 @@ class Workflow(unittest.TestCase):
         self.assertEqual([e['id'] for e in state['entries']],['old1','old2'])
         self.assertEqual(state['imports'],[])
         self.assertIsNone(core.dashboard(state,state['users']['B000884'],'2026-11')['import_restore'])
+
+    def test_replacement_recovers_late_tag_assignment_and_preserves_targets(self):
+        state=core.seed()
+        state['targets']['2026-11']={'BF01458':{'POST':18,'BB':12}}
+        first=[{'name':'TLS_REPORT.csv','content':
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
+            '111,1,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\\n'
+            '222,2,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'}]
+        first_result=core.import_csv(state,first,'B000884')
+        self.assertEqual(first_result[0]['unknown_agents'],1)
+        self.assertEqual(len(state['entries']),1)
+        second=[{'name':'TLS_REPORT.csv','content':
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
+            '222,2,02-NOV-26,BF01458,Telesales,Postpaid_Voice,15\\n'}]
+        core.import_csv(state,second,'B000884')
+        self.assertEqual(len(state['entries']),1)
+        self.assertEqual(state['entries'][0]['date'],'2026-11-02')
+        self.assertEqual(state['targets']['2026-11']['BF01458']['POST'],18)
+        previous=copy.deepcopy(state['entries'])
+        with self.assertRaises(core.Problem):
+            core.import_csv(state,[{'name':'TLS_REPORT.csv','content':
+                'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
+                '333,3,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'}],'B000884')
+        self.assertEqual(state['entries'],previous)
 
     def test_reporting_day_uses_last_transaction_date(self):
         state=core.seed()
