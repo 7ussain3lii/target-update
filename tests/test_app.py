@@ -208,7 +208,7 @@ class Workflow(unittest.TestCase):
             {'id':'old1','agent':'BF01458','date':'2026-10-10','category':'POST','points':2},
             {'id':'old2','agent':'B000597','date':'2026-10-10','category':'BB','points':3}]
         own=core.dashboard(state,state['users']['BF01458'],'2026-11')
-        self.assertEqual(own['history'][-2]['agents'],{'BF01458':{'POST':2,'BB':0,'MUL':0}})
+        self.assertEqual(own['history'][-2]['agents'],{'BF01458':{'POST':2,'BB':0,'MUL':0,'Migration':0,'Upgrade + Locking':0}})
         self.assertNotIn('import_restore',own)
         token='test-restoration'
         state['sessions'][core.hashlib.sha256(token.encode()).hexdigest()]={'username':'B000884','expires':time.time()+100}
@@ -242,6 +242,35 @@ class Workflow(unittest.TestCase):
         empty=core.dashboard(state,state['users']['B000884'],'2026-12')
         self.assertIsNone(empty['as_of_date'])
         self.assertEqual(empty['elapsed'],0)
+
+    def test_leader_rollups_use_agent_targets_and_keep_categories_separate(self):
+        state=core.seed()
+        state['users']['B000472']['active']=True
+        state['targets']['2026-11']={
+            'B000884':{'MUL':9999}, 'B000472':{'POST':9999,'BB':9999},
+            'JSO1910':{'MUL':40}, 'BF01338':{'MUL':25},
+            'BF01458':{'POST':15,'BB':10}, 'B000597':{'POST':5,'BB':5}}
+        state['entries']=[
+            {'agent':'JSO1910','date':'2026-11-02','category':'Migration','points':8},
+            {'agent':'BF01338','date':'2026-11-02','category':'Upgrade','points':3},
+            {'agent':'BF01338','date':'2026-11-02','category':'Locking','points':2},
+            {'agent':'BF01458','date':'2026-11-02','category':'POST','points':4},
+            {'agent':'B000597','date':'2026-11-02','category':'BB','points':3}]
+        admin=core.dashboard(state,state['users']['B000884'],'2026-11')
+        h=next(a for a in admin['agents'] if a['username']=='B000884')
+        a=next(a for a in admin['agents'] if a['username']=='B000472')
+        self.assertEqual(h['targets'],{'Migration':40,'Upgrade + Locking':25})
+        self.assertEqual(h['points']['Migration'],8)
+        self.assertEqual(h['points']['Upgrade + Locking'],5)
+        self.assertEqual(a['targets'],{'POST':20,'BB':15})
+        self.assertEqual(a['points']['POST'],4)
+        self.assertEqual(a['points']['BB'],3)
+        amina=core.dashboard(state,state['users']['B000472'],'2026-11')
+        self.assertEqual(len(amina['agents']),1)
+        self.assertEqual(amina['agents'][0]['username'],'B000472')
+        self.assertNotIn('JSO1910',amina['history'][-1]['agents'])
+        self.assertEqual(amina['elapsed'],2)
+
 
 
 if __name__=='__main__':
