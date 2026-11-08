@@ -44,7 +44,7 @@ def seed():
     roster = json.loads(pathlib.Path(__file__).with_name('roster.json').read_text())
     users = {}
     for agent in roster:
-        role = 'admin' if agent['username'] == 'B000884' else ('leader' if agent['username'] == 'B000472' else 'agent')
+        role = 'admin' if agent['username'] in ('B000884', 'B000472') else 'agent'
         users[agent['username']] = {**agent, 'role': role, 'pin': None, 'active': role == 'admin', 'must_change': role == 'admin'}
     users['B000884']['pin'] = pin_hash(valid_pin(initial_pin))
     rules = []
@@ -319,7 +319,7 @@ def report_targets(agent, monthly):
 def dashboard(state, user, month):
     period(month)
     admin = user['role'] == 'admin'
-    leader_id = user['username'] if user['role'] in ('admin', 'leader') else None
+    can_view_all = user['role'] in ('admin', 'manager')
     all_agents = [a for a in state['users'].values() if a['role'] == 'agent']
     monthly = state['targets'].get(month, {})
     zero_points = ('POST', 'BB', 'Migration', 'Upgrade', 'Locking')
@@ -367,7 +367,7 @@ def dashboard(state, user, month):
         # No phantom leader target when the agents' monthly targets are missing.
         return sums, targets if target_found else {}, pending, daily
 
-    if admin:
+    if can_view_all:
         visible = list(state['users'].values())
     else:
         visible = [user]
@@ -400,12 +400,12 @@ def dashboard(state, user, month):
                                           for key in ('POST', 'BB', 'MUL', 'Migration', 'Upgrade + Locking')}
         history.append({'month': reporting_month, 'agents': totals})
     result['history'] = history
-    if admin:
+    if can_view_all:
         backup = state.get('last_import_backup')
         result.update(rules=state['rules'], imports=state['imports'][:50],
                       audit=state['audit'][-30:][::-1],
                       import_restore=({'id': backup['id'], 'at': backup['at'], 'files': backup['files']}
-                                      if backup else None))
+                                      if admin and backup else None))
     return result
 
 
@@ -478,16 +478,20 @@ def action(state, path, data, token):
         if not name:
             raise Problem('Enter the agent name.')
         role = data.get('role','agent')
-        if role not in ('agent','leader'):
-            raise Problem('Choose agent or team leader.')
+        if role not in ('agent','leader','manager','admin'):
+            raise Problem('Choose agent, team leader, manager, or administrator.')
         if username == 'B000884':
             raise Problem('The owner account cannot be modified here.')
+        if username == 'B000472' and role != 'admin':
+            raise Problem('B000472 is a designated administrator.')
         existing = state['users'].get(username)
         pin = data.get('pin')
         if not existing and not pin:
             raise Problem('Set an initial PIN for a new account.')
         account = existing or {'username':username,'segment':'','targets':{},'pin':None,'must_change':True}
         account.update(name=name,role=role,active=bool(data.get('active',True)))
+        if role in ('manager','admin'):
+            account['segment'] = ''
         if pin:
             account.update(pin=pin_hash(valid_pin(pin)),must_change=True)
             state['sessions'] = {k:v for k,v in state['sessions'].items() if v['username'] != username}
