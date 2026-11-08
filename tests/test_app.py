@@ -255,6 +255,33 @@ class Workflow(unittest.TestCase):
                 '333,3,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'}],'B000884')
         self.assertEqual(state['entries'],previous)
 
+    def test_manager_read_only_visibility_and_admin_permissions(self):
+        state=core.seed()
+        self.assertEqual(state['users']['B000472']['role'],'admin')
+        state['users']['R000101']={'username':'R000101','name':'Test manager',
+            'role':'manager','segment':'','targets':{},'active':True,
+            'pin':core.pin_hash('1234'),'must_change':False}
+        state['targets']['2026-11']={'BF01458':{'POST':10,'BB':5}}
+        state['entries']=[{'agent':'BF01458','date':'2026-11-02',
+                          'category':'POST','points':4}]
+        manager=state['users']['R000101']
+        view=core.dashboard(state,manager,'2026-11')
+        self.assertIn('BF01458',[a['username'] for a in view['agents']])
+        self.assertIn('rules',view)
+        self.assertIn('audit',view)
+        self.assertIsNone(view['import_restore'])
+        token='manager-read-only'
+        state['sessions'][core.hashlib.sha256(token.encode()).hexdigest()]={
+            'username':'R000101','expires':time.time()+100}
+        for route,payload in [('import',{'files':[]}),
+                              ('targets',{'username':'BF01458','month':'2026-11',
+                                          'targets':{'POST':50}}),
+                              ('account',{'username':'BF01458','role':'admin'}),
+                              ('rule',{'rule':{}})]:
+            with self.assertRaises(core.Problem) as blocked:
+                core.action(state,route,payload,token)
+            self.assertEqual(blocked.exception.status,403)
+
     def test_reporting_day_uses_last_transaction_date(self):
         state=core.seed()
         state['entries']=[
