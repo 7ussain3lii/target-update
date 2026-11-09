@@ -113,6 +113,28 @@ class Workflow(unittest.TestCase):
         self.assertEqual(info['agents'][0]['points']['POST'],4.5)
         self.assertEqual(info['agents'][0]['points']['MUL'],2)
 
+    def test_issues_identify_exact_csv_row_and_avoid_subscriber_ids(self):
+        state=core.seed()
+        files=[{'name':'TLS_REPORT.csv','content':
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
+            '123456789,50,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\\n'
+            '222222222,51,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'
+            '333333333,52,03-NOV-26,BF01458,Telesales,Unknown_Class,15\\n'},
+            {'name':'TLS_MIG_REPOERT.csv','content':
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,flag\\n'
+            '444444444,53,04-NOV-26,BF01458,Telesales,Migration\\n'}]
+        results=core.import_csv(state,files,'B000884')
+        errors=results[0]['issues']
+        self.assertEqual(results[0]['issues_total'],2)
+        self.assertEqual([e['row'] for e in errors],[3,4])
+        self.assertEqual(errors[0]['agent'],'(blank TAG_AGENT_ID)')
+        self.assertEqual(errors[0]['date'],'02-NOV-26')
+        self.assertEqual(errors[1]['reason'],'Unknown sales segment.')
+        self.assertEqual(results[1]['issues'][0]['row'],2)
+        self.assertEqual(results[1]['issues'][0]['reason'],'No active scoring rule')
+        self.assertNotIn('222222222',json.dumps(results))
+        self.assertNotIn('444444444',json.dumps(results))
+
     def test_real_reports_filtering_and_unknown_agents(self):
         root=pathlib.Path('/workspace/attachments')
         paths=list(root.rglob('*.csv'))
