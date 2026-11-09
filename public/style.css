@@ -4,3 +4,11 @@
 /* Combined reporting metrics: two equal cards beneath individual segments. */
 .combined-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:720px){.combined-metrics{grid-template-columns:1fr}}
+
+/* Transaction issue inspection modal */
+dialog.issues-dialog{width:min(1100px,calc(100vw - 32px));max-height:85vh;overflow:auto}
+.issues-dialog .issue-table{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.issues-dialog th{position:sticky;top:0;z-index:1}
+.issues-dialog td{white-space:normal;min-width:80px;vertical-align:top}
+.issues-dialog td:first-child{white-space:nowrap}
+.issue-note{margin-top:12px;color:var(--muted);font-size:12px}
