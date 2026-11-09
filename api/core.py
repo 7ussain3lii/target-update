@@ -205,9 +205,14 @@ def import_csv(state, files, actor):
                 result['excluded'] += 1
                 continue
             username = row['tag_agent_id'].upper()
+            # File and CSV row locate the exact transaction without storing subscriber IDs.
+            locator = {'row': index, 'date': row.get('transdate','')[:32],
+                       'agent': username, 'activity': (row.get('flag') or row.get('com_class') or source)[:64]}
+            if not username:
+                locator['agent'] = '(blank TAG_AGENT_ID)'
             if username not in state['users']:
                 result['unknown_agents'] += 1
-                result['issues'].append({'row':index,'reason':'Unknown agent','agent':username})
+                result['issues'].append({**locator,'reason':'Missing TAG_AGENT_ID' if not username else 'Unknown TAG_AGENT_ID'})
                 continue
             try:
                 transaction_date = date(row['transdate'])
@@ -249,15 +254,16 @@ def import_csv(state, files, actor):
                 entry['points'] = score(entry,state['rules']) if source != 'family' else None
                 if entry['points'] is None:
                     result['pending'] += 1
-                    result['issues'].append({'row':index,'reason':'Family VAT mapping needs confirmation' if source=='family' else 'No active scoring rule', 'agent':username})
+                    result['issues'].append({**locator,'reason':'Family VAT mapping needs confirmation' if source=='family' else 'No active scoring rule'})
                 fresh_entries.append(entry)
                 known.add(fingerprint)
                 by_subno[match_key] = entry
                 result['imported'] += 1
             except Problem as error:
                 result['invalid'] += 1
-                result['issues'].append({'row':index,'reason':error.message,'agent':username})
-        result['issues'] = result['issues'][:100]
+                result['issues'].append({**locator,'reason':error.message})
+        result['issues_total'] = len(result['issues'])
+        result['issues'] = result['issues'][:500]
         summaries.append(result)
     if not fresh_entries:
         raise Problem('No valid Telesales sales found in the new reports. Existing data was not changed.')
