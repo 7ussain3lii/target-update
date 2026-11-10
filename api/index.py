@@ -56,6 +56,16 @@ class handler(BaseHTTPRequestHandler):
                 if user['must_change']:
                     return self.send(200,{'me':core.public_user(user),'change_required':True})
                 return self.send(200,core.dashboard(state,user,month))
+            if parsed.path == '/api/verification' or (parsed.path == '/api/index' and route == 'verification'):
+                _,state = self.state()
+                user=core.authenticate(state,self.token())
+                if user['must_change']:
+                    raise core.Problem('Change your PIN first.',403)
+                args=urllib.parse.parse_qs(parsed.query)
+                month=args.get('month',[core.dt.datetime.now(core.TZ).strftime('%Y-%m')])[0]
+                agent=args.get('agent',[user['username']])[0]
+                reveal=args.get('reveal',['0'])[0]=='1'
+                return self.send(200,core.verification.snapshot(state,user,month,agent,reveal,core))
             files = {'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
                      '/app.js':('app.js','application/javascript'),'/style.css':('style.css','text/css'),
                      '/overview.css':('overview.css','text/css')}
