@@ -67,7 +67,7 @@ class handler(BaseHTTPRequestHandler):
                 reveal=args.get('reveal',['0'])[0]=='1'
                 return self.send(200,core.verification.snapshot(state,user,month,agent,reveal,core))
             files = {'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
-                     '/app.js':('app.js','application/javascript'),'/verification.js':('verification.js','application/javascript'),'/style.css':('style.css','text/css'),
+                     '/app.js':('app.js','application/javascript'),'/verification.js':('verification.js','application/javascript'),'/daily-trends.js':('daily-trends.js','application/javascript'),'/style.css':('style.css','text/css'),
                      '/overview.css':('overview.css','text/css')}
             if parsed.path not in files:
                 return self.send(404,{'error':'Not found.'})
