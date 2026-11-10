@@ -251,10 +251,10 @@ def import_csv(state, files, actor):
                         continue
                     fresh_entries.remove(previous)
                     known.discard(previous['id'])
-                entry['points'] = score(entry,state['rules']) if source != 'family' else None
+                entry['points'] = 1 if source == 'family' else score(entry,state['rules'])
                 if entry['points'] is None:
                     result['pending'] += 1
-                    result['issues'].append({**locator,'reason':'Family VAT mapping needs confirmation' if source=='family' else 'No active scoring rule'})
+                    result['issues'].append({**locator,'reason':'No active scoring rule'})
                 fresh_entries.append(entry)
                 known.add(fingerprint)
                 by_subno[match_key] = entry
