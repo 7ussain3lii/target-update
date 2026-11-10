@@ -407,21 +407,35 @@ def dashboard(state, user, month):
                                           for key in ('POST', 'BB', 'MUL', 'Migration', 'Upgrade + Locking')}
         history.append({'month': reporting_month, 'agents': totals})
     result['history'] = history
-    # Read-only daily transaction counts. Official reports and agent submissions
-    # are deliberately aggregated independently; neither changes scoring.
+    # Reporting scope: team-wide trend for admins/managers, and one daily
+    # official-report series per authorized performance view.
+    kinds = ('POST', 'BB', 'Migration', 'Upgrade', 'Locking')
+    def counts(items):
+        by_day = {}
+        for sale in items:
+            day = sale.get('date', '')
+            category = sale.get('category', '')
+            if not day.startswith(month) or category not in kinds:
+                continue
+            row = by_day.setdefault(day, {k: 0 for k in kinds})
+            row[category] += 1
+        return [{'date': f'{month}-{day:02d}',
+                 **by_day.get(f'{month}-{day:02d}', {k: 0 for k in kinds})}
+                for day in range(1, days + 1)]
+
+    result['agent_daily_trends'] = {}
+    for person in visible:
+        if person['role'] == 'agent':
+            member_ids = {person['username']}
+        elif person['username'] in ('B000884', 'B000472') and person['role'] in ('admin', 'leader'):
+            team = 'MUL' if person['username'] == 'B000884' else 'Sales'
+            member_ids = {a['username'] for a in all_agents if agent_team(a) == team}
+        else:
+            continue
+        result['agent_daily_trends'][person['username']] = counts(
+            e for e in state['entries'] if e.get('agent') in member_ids)
+
     if can_view_all:
-        kinds = ('POST', 'BB', 'Migration', 'Upgrade', 'Locking')
-        def counts(items):
-            by_day = {}
-            for sale in items:
-                day = sale.get('date', '')
-                category = sale.get('category', '')
-                if not day.startswith(month) or category not in kinds:
-                    continue
-                row = by_day.setdefault(day, {k: 0 for k in kinds})
-                row[category] += 1
-            return [{'date': f'{month}-{day:02d}', **by_day.get(f'{month}-{day:02d}', {k:0 for k in kinds})}
-                    for day in range(1, days+1)]
         agent_ids = {a['username'] for a in all_agents}
         result['daily_trends'] = {
             'official': counts(e for e in state['entries'] if e.get('agent') in agent_ids),
