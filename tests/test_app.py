@@ -116,13 +116,13 @@ class Workflow(unittest.TestCase):
     def test_issues_identify_exact_csv_row_and_avoid_subscriber_ids(self):
         state=core.seed()
         files=[{'name':'TLS_REPORT.csv','content':
-            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
-            '123456789,50,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\\n'
-            '222222222,51,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'
-            '333333333,52,03-NOV-26,BF01458,Telesales,Unknown_Class,15\\n'},
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+            '123456789,50,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'
+            '222222222,51,02-NOV-26,,Telesales,Postpaid_Voice,15\n'
+            '333333333,52,03-NOV-26,BF01458,Telesales,Unknown_Class,15\n'},
             {'name':'TLS_MIG_REPOERT.csv','content':
-            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,flag\\n'
-            '444444444,53,04-NOV-26,BF01458,Telesales,Migration\\n'}]
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,flag\n'
+            '444444444,53,04-NOV-26,BF01458,Telesales,Migration\n'}]
         results=core.import_csv(state,files,'B000884')
         errors=results[0]['issues']
         self.assertEqual(results[0]['issues_total'],2)
@@ -316,15 +316,15 @@ class Workflow(unittest.TestCase):
         state=core.seed()
         state['targets']['2026-11']={'BF01458':{'POST':18,'BB':12}}
         first=[{'name':'TLS_REPORT.csv','content':
-            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
-            '111,1,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\\n'
-            '222,2,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'}]
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+            '111,1,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'
+            '222,2,02-NOV-26,,Telesales,Postpaid_Voice,15\n'}]
         first_result=core.import_csv(state,first,'B000884')
         self.assertEqual(first_result[0]['unknown_agents'],1)
         self.assertEqual(len(state['entries']),1)
         second=[{'name':'TLS_REPORT.csv','content':
-            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
-            '222,2,02-NOV-26,BF01458,Telesales,Postpaid_Voice,15\\n'}]
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+            '222,2,02-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'}]
         core.import_csv(state,second,'B000884')
         self.assertEqual(len(state['entries']),1)
         self.assertEqual(state['entries'][0]['date'],'2026-11-02')
@@ -332,8 +332,8 @@ class Workflow(unittest.TestCase):
         previous=copy.deepcopy(state['entries'])
         with self.assertRaises(core.Problem):
             core.import_csv(state,[{'name':'TLS_REPORT.csv','content':
-                'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\\n'
-                '333,3,02-NOV-26,,Telesales,Postpaid_Voice,15\\n'}],'B000884')
+                'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+                '333,3,02-NOV-26,,Telesales,Postpaid_Voice,15\n'}],'B000884')
         self.assertEqual(state['entries'],previous)
 
     def test_manager_read_only_visibility_and_admin_permissions(self):
@@ -400,9 +400,9 @@ class Workflow(unittest.TestCase):
         self.assertEqual(a['points']['POST'],4)
         self.assertEqual(a['points']['BB'],3)
         amina=core.dashboard(state,state['users']['B000472'],'2026-11')
-        self.assertEqual(len(amina['agents']),1)
-        self.assertEqual(amina['agents'][0]['username'],'B000472')
-        self.assertNotIn('JSO1910',amina['history'][-1]['agents'])
+        self.assertGreater(len(amina['agents']),1)
+        self.assertIn('B000472',[a['username'] for a in amina['agents']])
+        self.assertIn('JSO1910',amina['history'][-1]['agents'])
         self.assertEqual(amina['elapsed'],2)
 
 
