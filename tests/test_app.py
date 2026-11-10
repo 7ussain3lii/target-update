@@ -145,6 +145,55 @@ class Workflow(unittest.TestCase):
         self.assertEqual(state['entries'][0]['points'],1)
         self.assertEqual(state['entries'][0]['category'],'POST')
 
+    def test_subscriber_reconciliation_is_private_and_does_not_change_points(self):
+        state=core.seed()
+        state['users']['BF01458']['active']=True
+        state['users']['BF01458']['must_change']=False
+        state['users']['B000597']['active']=True
+        original=[{'name':'TLS_REPORT.csv','content':
+            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+            '12345678,1,09-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'
+            '87654321,2,09-NOV-26,B000597,Telesales,MBB,11\n'}]
+        core.import_csv(state,original,'B000884')
+        before=copy.deepcopy(state['entries'])
+        agent=state['users']['BF01458']
+        own=core.verification.snapshot(state,agent,'2026-11','BF01458',False,core)
+        self.assertEqual(own['summary']['official'],1)
+        self.assertEqual(own['official'][0]['subscriber'],'••••5678')
+        shown=core.verification.snapshot(state,agent,'2026-11','BF01458',True,core)
+        self.assertEqual(shown['official'][0]['subscriber'],'12345678')
+        with self.assertRaises(core.Problem) as denied:
+            core.verification.snapshot(state,agent,'2026-11','B000597',True,core)
+        self.assertEqual(denied.exception.status,403)
+        first=core.verification.add(state,agent,{'rows':[
+            {'subno':'12345678','date':'2026-11-09','category':'POST'},
+            {'subno':'99999999','date':'2026-11-09','category':'BB'}]},core)
+        self.assertEqual(first['added'],2)
+        results=core.verification.snapshot(state,agent,'2026-11','BF01458',False,core)
+        self.assertEqual(results['summary']['matched'],1)
+        self.assertEqual(results['summary']['missing'],1)
+        self.assertEqual(state['entries'],before)
+        self.assertEqual(core.verification.add(state,agent,{'subno':'12345678','date':'2026-11-09','category':'POST'},core)['duplicates'],1)
+        with self.assertRaises(core.Problem):
+            core.verification.delete(state,state['users']['B000597'],{'id':results['submitted'][0]['id']},core)
+        manager={'username':'B000278','role':'manager'}
+        manager_view=core.verification.snapshot(state,manager,'2026-11','B000597',True,core)
+        self.assertEqual(manager_view['official'][0]['subscriber'],'87654321')
+        self.assertEqual(len(state['entries']),2)
+
+    def test_daily_csv_validation_and_agent_assignment(self):
+        state=core.seed()
+        agent=state['users']['BF01458']
+        agent['role']='agent'
+        source='SUBNO,TRANSDATE,SEGMENT\n11111222,09-NOV-26,POST\n'
+        rows=core.verification.parse_csv(source,core)
+        self.assertEqual(len(rows),1)
+        core.verification.add(state,agent,{'rows':rows},core)
+        self.assertEqual(state['daily_sales'][0]['agent'],'BF01458')
+        self.assertNotIn('11111222',json.dumps(state['daily_sales']))
+        with self.assertRaises(core.Problem):
+            core.verification.parse_csv('BAD,HEADER\n1,2\n',core)
+
     def test_real_reports_filtering_and_unknown_agents(self):
         root=pathlib.Path('/workspace/attachments')
         paths=list(root.rglob('*.csv'))
