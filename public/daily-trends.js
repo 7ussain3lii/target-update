@@ -24,6 +24,13 @@ function officialTeamDailyTrends(){
  if(!canSeeAll()||current())return '';
  return dailySalesTrendPanel(state.daily_trends?.official,'Official report — Daily performance trends','Daily transaction counts from the uploaded official reports. These totals do not include agent-submitted sales.');
 }
+function individualOfficialDailyTrends(){
+ const person=current()||(state.me.role==='agent'?state.me:null);
+ if(!person)return '';
+ const records=state.agent_daily_trends?.[person.username];
+ if(!records)return '';
+ return dailySalesTrendPanel(records,person.name+' — Daily sales trend','Daily sales from the official uploaded reports for this performance view only. Agent submissions are not included.');
+}
 function agentsDailyTrendPage(){
  return title('AGENT SUBMISSIONS','Agents Daily Trend','Daily sales reported by agents, independent of the official reports and official achievement calculations.',monthControl())+
  dailySalesTrendPanel(state.daily_trends?.agent_inputs,'Agents Daily Trend','Daily transaction counts from agents’ own entries only. These do not award points or change targets.');
