@@ -34,3 +34,14 @@ dialog.issues-dialog{width:min(1100px,calc(100vw - 32px));max-height:85vh;overfl
 .verify-status.missing{background:#fff0dd;color:#9d5c13}
 @media(max-width:950px){.verification-form{grid-template-columns:repeat(2,minmax(0,1fr))}.verify-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:550px){.verification-form{grid-template-columns:1fr}.verify-stat-grid{grid-template-columns:1fr 1fr}.verify-toolbar{flex-direction:column;align-items:stretch}.verify-reveal{margin-left:0}}
+
+/* Daily trends: six independent activity tables, preserving existing report styles. */
+.daily-trend-section{grid-column:1/-1;margin:12px 0 24px}
+.daily-trend-intro{margin:0 0 18px}
+.daily-trend-intro h2{font-size:19px;font-weight:600;margin:0 0 6px}
+.daily-trend-intro p{color:var(--muted);font-size:12px;line-height:1.6;margin:0}
+.daily-trend-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:19px}
+.daily-trend-panel .table-wrap{max-height:490px;overflow:auto}
+.daily-trend-panel th{position:sticky;top:0;z-index:1}
+.daily-trend-panel td,.daily-trend-panel th{padding:12px 17px}
+@media(max-width:930px){.daily-trend-grid{grid-template-columns:1fr}}
