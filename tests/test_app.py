@@ -114,7 +114,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(info['agents'][0]['points']['MUL'],2)
 
     def test_issues_identify_exact_csv_row_and_avoid_subscriber_ids(self):
-        state=core.seed()
+        state=core.seed();core.normalize_rules(state)
         files=[{'name':'TLS_REPORT.csv','content':
             'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
             '123456789,50,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'
