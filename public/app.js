@@ -149,7 +149,7 @@ function insightsPanel(){
  });
  latestSummary=`${current()?current().name:'Telesales team'} · ${monthLabel}\n${summaryRows.join('\n')}\nBased on ${elapsed} of ${days} calendar days (last transaction: ${state.as_of_date||'none'}). Figures are provisional pending validation.`;
  const summaries=`<section class="panel"><div class="panel-head"><div><h2>Performance summary</h2><div class="sub">Review and copy a month-to-date update</div></div><button class="btn ghost" id="copy-performance-summary">Copy summary</button></div><div class="panel-body"><pre class="summary-text">${esc(latestSummary)}</pre></div></section>`;
- return `<div class="insights-grid">${alerts}${leaderboard}${canSeeAll()&&!current()?officialTeamDailyTrends():trends}${summaries}</div>`;
+ return `<div class="insights-grid">${alerts}${leaderboard}${canSeeAll()&&!current()?officialTeamDailyTrends():individualOfficialDailyTrends()}${summaries}</div>`;
 }
 const originalOverview=overview;
 overview=function(){return originalOverview()+insightsPanel()};
