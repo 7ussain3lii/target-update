@@ -135,6 +135,16 @@ class Workflow(unittest.TestCase):
         self.assertNotIn('222222222',json.dumps(results))
         self.assertNotIn('444444444',json.dumps(results))
 
+    def test_family_change_one_point(self):
+        state=core.seed()
+        rows='SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,to_rental\n'
+        rows+='sample1,2,09-NOV-26,B000597,Telesales,33\n'
+        results=core.import_csv(state,[{'name':'TLS_FAM_CHANGE.csv','content':rows}],'B000884')
+        self.assertEqual(results[0]['pending'],0)
+        self.assertEqual(results[0]['issues'],[])
+        self.assertEqual(state['entries'][0]['points'],1)
+        self.assertEqual(state['entries'][0]['category'],'POST')
+
     def test_real_reports_filtering_and_unknown_agents(self):
         root=pathlib.Path('/workspace/attachments')
         paths=list(root.rglob('*.csv'))
