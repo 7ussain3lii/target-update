@@ -407,6 +407,26 @@ def dashboard(state, user, month):
                                           for key in ('POST', 'BB', 'MUL', 'Migration', 'Upgrade + Locking')}
         history.append({'month': reporting_month, 'agents': totals})
     result['history'] = history
+    # Read-only daily transaction counts. Official reports and agent submissions
+    # are deliberately aggregated independently; neither changes scoring.
+    if can_view_all:
+        kinds = ('POST', 'BB', 'Migration', 'Upgrade', 'Locking')
+        def counts(items):
+            by_day = {}
+            for sale in items:
+                day = sale.get('date', '')
+                category = sale.get('category', '')
+                if not day.startswith(month) or category not in kinds:
+                    continue
+                row = by_day.setdefault(day, {k: 0 for k in kinds})
+                row[category] += 1
+            return [{'date': f'{month}-{day:02d}', **by_day.get(f'{month}-{day:02d}', {k:0 for k in kinds})}
+                    for day in range(1, days+1)]
+        agent_ids = {a['username'] for a in all_agents}
+        result['daily_trends'] = {
+            'official': counts(e for e in state['entries'] if e.get('agent') in agent_ids),
+            'agent_inputs': counts(e for e in state.get('daily_sales', []) if e.get('agent') in agent_ids)
+        }
     if can_view_all:
         backup = state.get('last_import_backup')
         result.update(rules=state['rules'], imports=state['imports'][:50],
