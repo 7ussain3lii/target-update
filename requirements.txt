@@ -1,1 +1,2 @@
-# Python 3.12 standard library only. No third-party runtime dependencies.
+# Cryptography for authenticated encryption of subscriber numbers.
+cryptography==50.0.2
