@@ -15,6 +15,7 @@ import re
 import secrets
 import time
 import targets_xlsx
+import verification
 from decimal import Decimal, InvalidOperation
 
 TZ = dt.timezone(dt.timedelta(hours=3))
@@ -243,7 +244,7 @@ def import_csv(state, files, actor):
                 match_key = subno_key(row.get('subno', ''))
                 entry = {'id':fingerprint,'source':source,'agent':username,'date':transaction_date,
                          'segment':segment,'category':category,'rental':rental,'batch':result['id'],
-                         'subno_key':match_key}
+                         'subno_key':match_key,'subno_enc':verification.encrypt(row['subno'])}
                 previous = by_subno.get(match_key)
                 if previous:
                     result['duplicates'] += 1
@@ -415,6 +416,11 @@ def dashboard(state, user, month):
     return result
 
 
+def self_core():
+    import sys
+    return sys.modules[__name__]
+
+
 def action(state, path, data, token):
     normalize_rules(state)
     if path == 'login':
@@ -454,6 +460,13 @@ def action(state, path, data, token):
         return {'ok':True},200,None
     if user['must_change']:
         raise Problem('Change your initial PIN before continuing.',403)
+    if path in ('daily-add', 'daily-csv', 'daily-delete'):
+        if path == 'daily-add':
+            return verification.add(state,user,data,self_core(),),200,None
+        if path == 'daily-csv':
+            rows=verification.parse_csv(data.get('content'), self_core())
+            return verification.add(state,user,{'rows':rows},self_core()),200,None
+        return verification.delete(state,user,data,self_core()),200,None
     if user['role'] != 'admin':
         raise Problem('Administrator access required.',403)
     if path == 'import':
