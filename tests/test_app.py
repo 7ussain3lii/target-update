@@ -392,6 +392,17 @@ class Workflow(unittest.TestCase):
         self.assertEqual(sum(d['BB'] for d in own),0)
         agent_view=core.dashboard(state,state['users']['BF01458'],'2026-11')
         self.assertNotIn('daily_trends',agent_view)
+        self.assertEqual(set(agent_view['agent_daily_trends']), {'BF01458'})
+        self.assertEqual(agent_view['agent_daily_trends']['BF01458'][0]['POST'],1)
+        self.assertEqual(agent_view['agent_daily_trends']['BF01458'][0]['BB'],1)
+        self.assertEqual(agent_view['agent_daily_trends']['BF01458'][1]['Migration'],0)
+        self.assertEqual(admin_view['agent_daily_trends']['JSO1910'][1]['Migration'],1)
+        self.assertEqual(admin_view['agent_daily_trends']['BF01338'][1]['Upgrade'],1)
+        leader=admin_view['agent_daily_trends']['B000884']
+        self.assertEqual(leader[1]['Migration'],1)
+        self.assertEqual(leader[1]['Upgrade'],1)
+        self.assertEqual(leader[1]['Locking'],1)
+        self.assertEqual(sum(x['POST'] for x in agent_view['agent_daily_trends']['BF01458']),1)
         self.assertEqual(admin_view['agents'][0]['points']['POST'],0)
 
     def test_reporting_day_uses_last_transaction_date(self):
