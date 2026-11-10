@@ -363,6 +363,37 @@ class Workflow(unittest.TestCase):
                 core.action(state,route,payload,token)
             self.assertEqual(blocked.exception.status,403)
 
+    def test_daily_trends_are_separate_by_source_and_activity(self):
+        state=core.seed()
+        state['entries']=[
+            {'agent':'BF01458','date':'2026-11-01','category':'POST','points':3},
+            {'agent':'BF01458','date':'2026-11-01','category':'BB','points':2},
+            {'agent':'JSO1910','date':'2026-11-02','category':'Migration','points':5},
+            {'agent':'BF01338','date':'2026-11-02','category':'Upgrade','points':10},
+            {'agent':'BF01338','date':'2026-11-02','category':'Locking','points':1},
+            {'agent':'BF01458','date':'2026-10-31','category':'POST','points':50}]
+        state['daily_sales']=[
+            {'agent':'BF01458','date':'2026-11-01','category':'POST','id':'a'},
+            {'agent':'BF01458','date':'2026-11-01','category':'POST','id':'b'},
+            {'agent':'BF01338','date':'2026-11-03','category':'Locking','id':'c'},
+            {'agent':'BF01458','date':'2026-10-01','category':'BB','id':'d'}]
+        admin_view=core.dashboard(state,state['users']['B000884'],'2026-11')
+        official=admin_view['daily_trends']['official']
+        own=admin_view['daily_trends']['agent_inputs']
+        self.assertEqual(len(official),30)
+        self.assertEqual(official[0]['POST'],1)
+        self.assertEqual(official[0]['BB'],1)
+        self.assertEqual(official[1]['Migration'],1)
+        self.assertEqual(official[1]['Upgrade'],1)
+        self.assertEqual(official[1]['Locking'],1)
+        self.assertEqual(sum(d['Migration'] for d in official),1)
+        self.assertEqual(own[0]['POST'],2)
+        self.assertEqual(own[2]['Locking'],1)
+        self.assertEqual(sum(d['BB'] for d in own),0)
+        agent_view=core.dashboard(state,state['users']['BF01458'],'2026-11')
+        self.assertNotIn('daily_trends',agent_view)
+        self.assertEqual(admin_view['agents'][0]['points']['POST'],0)
+
     def test_reporting_day_uses_last_transaction_date(self):
         state=core.seed()
         state['entries']=[
