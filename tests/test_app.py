@@ -248,6 +248,60 @@ class Workflow(unittest.TestCase):
             core.import_csv(state,[{'name':'TLS_MIG_REPOERT.csv','content':'unused'}],'B000884')
         self.assertEqual(state['entries'],before)
 
+    def test_admin_official_sale_exclusions_persist_and_restore(self):
+        state=core.seed();core.normalize_rules(state)
+        state['targets']['2026-11']={'BF01458':{'POST':18,'BB':12}}
+        report=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+                '12345678,1,09-NOV-26,BF01458,Telesales,Postpaid_Voice,9.5\n'
+                '87654321,2,10-NOV-26,BF01458,Telesales,MBB,11\n')
+        files=[{'name':'TLS_REPORT.csv','content':report}]
+        core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['entries']),2)
+        self.assertEqual(core.dashboard(state,state['users']['BF01458'],'2026-11')['agents'][0]['points']['POST'],1)
+        before=core.dashboard(state,state['users']['BF01458'],'2026-11')['agents'][0]['targets']
+        admin=state['users']['B000884']
+        manager={'username':'manager','role':'manager'}
+        agent=state['users']['BF01458']
+        listing=core.sales_management.list_sales(state,admin,{'month':'2026-11','reveal':False},core)
+        self.assertEqual(listing['active'],2)
+        self.assertTrue(all('12345678' not in r['subscriber'] for r in listing['records']))
+        self.assertEqual(core.sales_management.list_sales(state,admin,{'month':'2026-11','subscriber':'12345678','reveal':True},core)['records'][0]['subscriber'],'12345678')
+        with self.assertRaises(core.Problem) as blocked:
+            core.sales_management.list_sales(state,agent,{'month':'2026-11'},core)
+        self.assertEqual(blocked.exception.status,403)
+        target=next(e for e in state['entries'] if e['category']=='POST')
+        key=core.sales_management.stable_id(target)
+        with self.assertRaises(core.Problem):
+            core.sales_management.update(state,manager,{'id':key,'operation':'exclude','reason':'Invalid credit'},core)
+        with self.assertRaises(core.Problem):
+            core.sales_management.update(state,admin,{'id':key,'operation':'exclude','reason':''},core)
+        with self.assertRaises(core.Problem):
+            core.sales_management.update(state,admin,{'id':'a'*64,'operation':'exclude','reason':'Incorrect entry'},core)
+        result=core.sales_management.update(state,admin,{'id':key,'operation':'exclude','reason':'Incorrect credit'},core)
+        self.assertEqual(result['status'],'excluded')
+        self.assertEqual(len(state['entries']),1)
+        self.assertEqual(len(state['excluded_entries']),1)
+        self.assertEqual(core.dashboard(state,agent,'2026-11')['agents'][0]['points']['POST'],0)
+        self.assertEqual(core.dashboard(state,agent,'2026-11')['agents'][0]['targets'],before)
+        self.assertEqual(core.dashboard(state,admin,'2026-11')['daily_trends']['official'][8]['POST'],0)
+        listing=core.sales_management.list_sales(state,manager,{'month':'2026-11'},core)
+        self.assertEqual((listing['active'],listing['excluded']),(1,1))
+        self.assertEqual(next(x for x in listing['records'] if x['status']=='Excluded')['reason'],'Incorrect credit')
+        # Reuploading the same report does not undo administrator decisions.
+        core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['entries']),1)
+        self.assertEqual(len(state['excluded_entries']),1)
+        self.assertEqual(len(state['sale_exclusions']),1)
+        restored=core.sales_management.update(state,admin,{'id':key,'operation':'restore'},core)
+        self.assertEqual(restored['status'],'restored')
+        self.assertEqual(len(state['entries']),2)
+        self.assertFalse(state['sale_exclusions'])
+        self.assertEqual(core.dashboard(state,agent,'2026-11')['agents'][0]['points']['POST'],1)
+        core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['entries']),2)
+        self.assertTrue(any(x['action']=='Official sale excluded' for x in state['audit']))
+        self.assertTrue(any(x['action']=='Official sale restored' for x in state['audit']))
+
     def test_post_sales_take_priority_over_upgrade_even_with_later_date(self):
         state=core.seed();core.normalize_rules(state)
         sales=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
