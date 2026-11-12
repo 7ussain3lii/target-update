@@ -45,3 +45,16 @@ dialog.issues-dialog{width:min(1100px,calc(100vw - 32px));max-height:85vh;overfl
 .daily-trend-panel th{position:sticky;top:0;z-index:1}
 .daily-trend-panel td,.daily-trend-panel th{padding:12px 17px}
 @media(max-width:930px){.daily-trend-grid{grid-template-columns:1fr}}
+
+/* Administrator transaction review */
+.sales-manager-controls{display:flex;flex-wrap:wrap;align-items:end;gap:12px}
+.sales-manager-controls label{display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--muted)}
+.sales-manager-controls input[type=text]{min-width:220px}
+.sales-manager-reveal{display:flex!important;align-items:center!important;flex-direction:row!important;margin-left:auto;gap:8px}
+.sales-manager-reveal input{width:17px;height:17px}
+.sales-manager-note{margin:12px 0 0;font-size:12px}
+.sales-manager-filters{display:flex;flex-wrap:wrap;gap:14px}
+.sales-manager-filters label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+.sales-manager-filters input{min-width:220px}
+.sales-manager-agent{display:block;color:var(--muted);font-size:11px;max-width:210px;word-break:break-word}
+@media(max-width:620px){.sales-manager-reveal{margin-left:0}.sales-manager-controls{align-items:stretch}}
