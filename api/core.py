@@ -160,8 +160,11 @@ def subno_key(subno):
 
 
 def preference(entry):
-    # An earlier transaction wins; on the same date Migration/Upgrade beats Locking.
-    return (entry['date'], 0 if entry['segment'] in ('Migration', 'Upgrade') else
+    # POST activations from TLS_REPORT are authoritative for POST credit, even
+    # when the same subscriber also appears in TLS_LOCK_REPOERT as Upgrade.
+    # Otherwise keep the existing earliest-date / MUL activity precedence.
+    return (0 if entry['source'] == 'sales' and entry['category'] == 'POST' else 1,
+            entry['date'], 0 if entry['segment'] in ('Migration', 'Upgrade') else
             1 if entry['segment'] == 'Locking' else 0)
 
 
