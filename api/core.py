@@ -16,6 +16,7 @@ import secrets
 import time
 import targets_xlsx
 import verification
+import sales_management
 from decimal import Decimal, InvalidOperation
 
 TZ = dt.timezone(dt.timedelta(hours=3))
@@ -276,7 +277,7 @@ def import_csv(state, files, actor):
     if not fresh_entries:
         raise Problem('No valid Telesales sales found in the new reports. Existing data was not changed.')
     old_count = len(state['entries'])
-    state['entries'] = fresh_entries
+    state['entries'] = sales_management.split_import(state, fresh_entries)
     # Retain upload history for audit and undo; no historical sales are counted.
     for result in summaries:
         result['replaced_previous_sales'] = old_count
@@ -508,22 +509,29 @@ def action(state, path, data, token):
             rows=verification.parse_csv(data.get('content'), self_core())
             return verification.add(state,user,{'rows':rows},self_core()),200,None
         return verification.delete(state,user,data,self_core()),200,None
+    if path == 'official-sale':
+        return sales_management.update(state,user,data,self_core()),200,None
     if user['role'] != 'admin':
         raise Problem('Administrator access required.',403)
     if path == 'import':
         before_entries=copy.deepcopy(state['entries'])
         before_imports=copy.deepcopy(state['imports'])
+        before_excluded=copy.deepcopy(state.get('excluded_entries',[]))
         result = import_csv(state,data.get('files'),user['username'])
         state['last_import_backup']={
             'id':secrets.token_hex(8),'at':dt.datetime.now(TZ).isoformat(),
             'files':[r['file'] for r in result],
-            'entries':before_entries,'imports':before_imports}
+            'entries':before_entries,'imports':before_imports,
+            'excluded_entries':before_excluded}
     elif path == 'undo-import':
         backup=state.get('last_import_backup')
         if not backup or data.get('backup_id') != backup['id']:
             raise Problem('The available import backup has changed. Refresh and review again.')
         state['entries']=backup['entries']
         state['imports']=backup['imports']
+        # Keep administrator exclusions intact across import undo.
+        restored=backup.get('excluded_entries',[])
+        state['entries']=sales_management.split_import(state,state['entries']+restored)
         state.pop('last_import_backup',None)
         result={'ok':True,'restored':True}
     elif path == 'targets-preview':
