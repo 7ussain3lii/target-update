@@ -66,8 +66,18 @@ class handler(BaseHTTPRequestHandler):
                 agent=args.get('agent',[user['username']])[0]
                 reveal=args.get('reveal',['0'])[0]=='1'
                 return self.send(200,core.verification.snapshot(state,user,month,agent,reveal,core))
+            if parsed.path == '/api/official-sales' or (parsed.path == '/api/index' and route == 'official-sales'):
+                _,state=self.state()
+                user=core.authenticate(state,self.token())
+                if user['must_change']:
+                    raise core.Problem('Change your PIN first.',403)
+                args=urllib.parse.parse_qs(parsed.query)
+                request={'month':args.get('month',[core.dt.datetime.now(core.TZ).strftime('%Y-%m')])[0],
+                         'reveal':args.get('reveal',['0'])[0]=='1',
+                         'subscriber':args.get('subscriber',[''])[0]}
+                return self.send(200,core.sales_management.list_sales(state,user,request,core))
             files = {'/':('index.html','text/html; charset=utf-8'),'/index.html':('index.html','text/html; charset=utf-8'),
-                     '/app.js':('app.js','application/javascript'),'/verification.js':('verification.js','application/javascript'),'/daily-trends.js':('daily-trends.js','application/javascript'),'/style.css':('style.css','text/css'),
+                     '/app.js':('app.js','application/javascript'),'/verification.js':('verification.js','application/javascript'),'/daily-trends.js':('daily-trends.js','application/javascript'),'/sales-admin.js':('sales-admin.js','application/javascript'),'/style.css':('style.css','text/css'),
                      '/overview.css':('overview.css','text/css')}
             if parsed.path not in files:
                 return self.send(404,{'error':'Not found.'})
