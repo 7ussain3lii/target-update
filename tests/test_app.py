@@ -96,7 +96,7 @@ class Workflow(unittest.TestCase):
     def test_csv_points_duplicates_pending_and_recalculation(self):
         state=core.seed();core.normalize_rules(state)
         files=[{'name':'TLS_REPORT.csv','content':'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n1,2,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n2,3,01-NOV-26,BF01458,Portal,MBB,11\n3,4,01-NOV-26,UNKNOWN,Telesales,MBB,11\n4,5,01-NOV-26,BF01458,Telesales,FAMILY,33\n5,6,01-NOV-26,BF01458,Telesales,FIBER,16.463000\n'},
-               {'name':'TLS_MIG_REPOERT.csv','content':'SUBNO,contrno,transdate,tag_agent_id,TAG_PAY_DESK,FLAG\n6,7,01-NOV-26,BF01458,Telesales,Migration\n'}]
+               {'name':'TLS_LOCK_REPOERT.csv','content':'SUBNO,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n6,7,01-NOV-26,BF01458,Telesales,TLS Plan MVPP\n'}]
         result=core.import_csv(state,files,'B000884')
         self.assertEqual(result[0]['imported'],3)
         self.assertEqual(result[0]['excluded'],1)
@@ -120,9 +120,9 @@ class Workflow(unittest.TestCase):
             '123456789,50,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'
             '222222222,51,02-NOV-26,,Telesales,Postpaid_Voice,15\n'
             '333333333,52,03-NOV-26,BF01458,Telesales,Unknown_Class,15\n'},
-            {'name':'TLS_MIG_REPOERT.csv','content':
-            'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,flag\n'
-            '444444444,53,04-NOV-26,BF01458,Telesales,Migration\n'}]
+            {'name':'TLS_LOCK_REPOERT.csv','content':
+            'SUBNO,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n'
+            '444444444,53,04-NOV-26,BF01458,Telesales,TLS Plan MVPP\n'}]
         results=core.import_csv(state,files,'B000884')
         errors=results[0]['issues']
         self.assertEqual(results[0]['issues_total'],2)
@@ -197,34 +197,31 @@ class Workflow(unittest.TestCase):
     def test_real_reports_filtering_and_unknown_agents(self):
         root=pathlib.Path('/workspace/attachments')
         paths=list(root.rglob('*.csv'))
-        if len(paths)!=4:
-            self.skipTest('User reports not available outside original workspace')
+        if len(paths)!=3:
+            self.skipTest('Three user reports not available outside original workspace')
         state=core.seed();core.normalize_rules(state)
         result=core.import_csv(state,[{'name':p.name,'content':p.read_text(encoding='utf-8-sig')} for p in paths],'B000884')
         by_name={r['file']:r for r in result}
         self.assertEqual(by_name['TLS_REPORT.csv']['rows'],22)
         self.assertEqual(by_name['TLS_REPORT.csv']['excluded'],19)
-        self.assertEqual(by_name['TLS_MIG_REPOERT.csv']['excluded'],6)
         self.assertEqual(by_name['TLS_LOCK_REPOERT.csv']['excluded'],1)
         self.assertEqual(by_name['TLS_FAM_CHANGE.csv']['rows'],0)
 
     def test_subno_dedup_across_reports_dates_and_reuploads(self):
         state=core.seed()
-        locking='subno,contrno,transdate,tag_agent_id,tag_paydesk\n111,1,01-NOV-26,BF01458,Telesales\n222,2,03-NOV-26,BF01458,Telesales\n'
-        migration='SUBNO,contrno,transdate,tag_agent_id,TAG_PAY_DESK,FLAG\n111,3,01-NOV-26,BF01458,Telesales,Migration\n222,4,02-NOV-26,BF01458,Telesales,Upgrade\n'
-        files=[{'name':'TLS_LOCK_REPOERT.csv','content':locking},
-               {'name':'TLS_MIG_REPOERT.csv','content':migration}]
+        locking='subno,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n111,1,01-NOV-26,BF01458,Telesales,TLS Plan MVPP\n222,2,03-NOV-26,BF01458,Telesales,TLS Plan Locking\n111,3,02-NOV-26,BF01458,Telesales,TLS Plan Locking\n222,4,02-NOV-26,BF01458,Telesales,TLS Plan Upgrade\n'
+        files=[{'name':'TLS_LOCK_REPOERT.csv','content':locking}]
         results=core.import_csv(state,files,'B000884')
         self.assertEqual(len(state['entries']),2)
         self.assertEqual({e['segment'] for e in state['entries']},{'Migration','Upgrade'})
-        self.assertEqual(results[1]['duplicates'],2)
+        self.assertEqual(results[0]['duplicates'],2)
         self.assertEqual(sum(r['duplicates'] for r in core.import_csv(state,files,'B000884')),2)
         self.assertEqual(len(state['entries']),2)
         self.assertNotIn('111',json.dumps(state['entries']))
         self.assertNotIn('222',json.dumps(state['entries']))
 
         # A new snapshot entirely replaces the previous transactions.
-        later='subno,contrno,transdate,tag_agent_id,tag_paydesk\n222,5,04-NOV-26,BF01458,Telesales\n'
+        later='subno,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n222,5,04-NOV-26,BF01458,Telesales,TLS Plan Locking\n'
         core.import_csv(state,[{'name':'TLS_LOCK_REPOERT.csv','content':later}],'B000884')
         self.assertEqual(len(state['entries']),1)
         self.assertEqual(state['entries'][0]['date'],'2026-11-04')
