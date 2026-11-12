@@ -248,6 +248,36 @@ class Workflow(unittest.TestCase):
             core.import_csv(state,[{'name':'TLS_MIG_REPOERT.csv','content':'unused'}],'B000884')
         self.assertEqual(state['entries'],before)
 
+    def test_post_sales_take_priority_over_upgrade_even_with_later_date(self):
+        state=core.seed();core.normalize_rules(state)
+        sales=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+               '10012847,1,08-NOV-26,BF01492,Telesales,Family,11\n'
+               '10012844,2,08-NOV-26,BF01465,Telesales,Family,11\n'
+               '10012824,3,10-NOV-26,B000597,Telesales,Family,11\n'
+               '10012822,4,10-NOV-26,BF01465,Telesales,Family,11\n')
+        locking=('SUBNO,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n'
+                 '10012847,11,07-NOV-26,BF01492,Telesales,TLS Plan Upgrade\n'
+                 '10012844,12,07-NOV-26,BF01465,Telesales,TLS Plan Upgrade\n'
+                 '10012824,13,09-NOV-26,B000597,Telesales,TLS Plan Upgrade\n'
+                 '10012822,14,09-NOV-26,BF01465,Telesales,TLS Plan Upgrade\n'
+                 '99999999,15,10-NOV-26,JSO1910,Telesales,TLS Plan MVPP\n')
+        for files in (
+                [{'name':'TLS_LOCK_REPOERT.csv','content':locking},
+                 {'name':'TLS_REPORT.csv','content':sales}],
+                [{'name':'TLS_REPORT.csv','content':sales},
+                 {'name':'TLS_LOCK_REPOERT.csv','content':locking}]):
+            result=core.import_csv(state,files,'B000884')
+            matching=[e for e in state['entries'] if e['category']=='POST']
+            self.assertEqual(len(matching),4)
+            self.assertEqual({e['source'] for e in matching},{'sales'})
+            self.assertEqual({e['segment'] for e in matching},{'Family'})
+            self.assertEqual(sum(e['points'] for e in matching),4)
+            self.assertEqual(len(state['entries']),5)
+            self.assertEqual(sum(e['category']=='Upgrade' for e in state['entries']),0)
+            self.assertEqual(sum(e['category']=='Migration' for e in state['entries']),1)
+            self.assertEqual(sum(x['duplicates'] for x in result),4)
+            self.assertEqual(core.dashboard(state,state['users']['BF01465'],'2026-11')['agents'][0]['points']['POST'],2)
+
     def test_subno_dedup_across_reports_dates_and_reuploads(self):
         state=core.seed()
         locking='subno,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n111,1,01-NOV-26,BF01458,Telesales,TLS Plan MVPP\n222,2,03-NOV-26,BF01458,Telesales,TLS Plan Locking\n111,3,02-NOV-26,BF01458,Telesales,TLS Plan Locking\n222,4,02-NOV-26,BF01458,Telesales,TLS Plan Upgrade\n'
