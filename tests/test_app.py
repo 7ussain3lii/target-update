@@ -233,8 +233,9 @@ class Workflow(unittest.TestCase):
         self.assertEqual(locking_result['imported'],3)
         self.assertEqual(locking_result['excluded'],1)
         self.assertEqual(locking_result['invalid'],1)
-        self.assertEqual(locking_result['issues'][0]['row'],6)
-        self.assertIn('transaction_type',locking_result['issues'][0]['reason'])
+        invalid_type = [i for i in locking_result['issues'] if 'transaction_type' in i['reason']]
+        self.assertEqual(len(invalid_type),1)
+        self.assertEqual(invalid_type[0]['row'],6)
         self.assertEqual(result[2]['pending'],0)
         admin=core.dashboard(state,state['users']['B000884'],'2026-11')
         daily=admin['daily_trends']['official']
