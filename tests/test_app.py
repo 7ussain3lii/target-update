@@ -207,6 +207,46 @@ class Workflow(unittest.TestCase):
         self.assertEqual(by_name['TLS_LOCK_REPOERT.csv']['excluded'],1)
         self.assertEqual(by_name['TLS_FAM_CHANGE.csv']['rows'],0)
 
+    def test_three_file_upload_classifies_migration_upgrade_and_locking(self):
+        state=core.seed();core.normalize_rules(state)
+        # Production locking CSV contains leading spaces in some header names.
+        locking=('subno,contrno, transdate, tag_agent_id, tag_paydesk,transaction_type\n'
+                 '600001,1,10-NOV-26,JSO1910,Telesales,TLS Plan MVPP\n'
+                 '600002,2,10-NOV-26,BF01338,Telesales,TLS Plan Upgrade\n'
+                 '600003,3,11-NOV-26,BF01338,Telesales,TLS Plan Locking\n'
+                 '600004,4,11-NOV-26,BF01338,Portal,TLS Plan Upgrade\n'
+                 '600005,5,11-NOV-26,BF01338,Telesales,Unrecognized Activity\n')
+        files=[
+            {'name':'TLS_REPORT.csv','content':
+             'subno,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+             '700001,6,10-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'},
+            {'name':'TLS_LOCK_REPOERT.csv','content':locking},
+            {'name':'TLS_FAM_CHANGE.csv','content':
+             'subno,contrno,transdate,tag_agent_id,tag_pay_desk\n'
+             '800001,7,10-NOV-26,BF01458,Telesales\n'}
+        ]
+        result=core.import_csv(state,files,'B000884')
+        self.assertEqual(len(result),3)
+        categories={e['category'] for e in state['entries']}
+        self.assertEqual(categories,{'POST','Migration','Upgrade','Locking'})
+        locking_result=result[1]
+        self.assertEqual(locking_result['imported'],3)
+        self.assertEqual(locking_result['excluded'],1)
+        self.assertEqual(locking_result['invalid'],1)
+        self.assertEqual(locking_result['issues'][0]['row'],6)
+        self.assertIn('transaction_type',locking_result['issues'][0]['reason'])
+        self.assertEqual(result[2]['pending'],0)
+        admin=core.dashboard(state,state['users']['B000884'],'2026-11')
+        daily=admin['daily_trends']['official']
+        self.assertEqual(daily[9]['Migration'],1)
+        self.assertEqual(daily[9]['Upgrade'],1)
+        self.assertEqual(daily[10]['Locking'],1)
+        self.assertEqual(daily[9]['POST'],2)
+        before=copy.deepcopy(state['entries'])
+        with self.assertRaises(core.Problem):
+            core.import_csv(state,[{'name':'TLS_MIG_REPOERT.csv','content':'unused'}],'B000884')
+        self.assertEqual(state['entries'],before)
+
     def test_subno_dedup_across_reports_dates_and_reuploads(self):
         state=core.seed()
         locking='subno,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n111,1,01-NOV-26,BF01458,Telesales,TLS Plan MVPP\n222,2,03-NOV-26,BF01458,Telesales,TLS Plan Locking\n111,3,02-NOV-26,BF01458,Telesales,TLS Plan Locking\n222,4,02-NOV-26,BF01458,Telesales,TLS Plan Upgrade\n'
