@@ -166,8 +166,8 @@ def preference(entry):
 
 
 def import_csv(state, files, actor):
-    if not isinstance(files, list) or not 1 <= len(files) <= 4:
-        raise Problem('Select one to four CSV reports.')
+    if not isinstance(files, list) or not 1 <= len(files) <= 3:
+        raise Problem('Select up to three CSV reports: Sales, Locking, and Family Change.')
     if not os.environ.get('TARGET_SUBNO_HMAC_KEY'):
         raise Problem('Set TARGET_SUBNO_HMAC_KEY on the server before importing.', 503)
     # Each batch is a complete sales snapshot. Build it separately and publish
@@ -179,10 +179,12 @@ def import_csv(state, files, actor):
     names = [file.get('name') for file in files]
     if len(set(names)) != len(names):
         raise Problem('Each report can be uploaded only once per batch.')
+    if 'TLS_MIG_REPOERT.csv' in names:
+        raise Problem('TLS_MIG_REPOERT.csv is no longer required. Migration and Upgrade are now imported from TLS_LOCK_REPOERT.csv.')
     for file in files:
         name = file.get('name', '')
-        sources = {'TLS_REPORT.csv':'sales', 'TLS_MIG_REPOERT.csv':'migration',
-                   'TLS_LOCK_REPOERT.csv':'locking','TLS_FAM_CHANGE.csv':'family'}
+        sources = {'TLS_REPORT.csv':'sales', 'TLS_LOCK_REPOERT.csv':'locking',
+                   'TLS_FAM_CHANGE.csv':'family'}
         if name not in sources:
             raise Problem('Unrecognized report: ' + str(name)[:100])
         source = sources[name]
@@ -190,7 +192,7 @@ def import_csv(state, files, actor):
         headers = {h.strip().lower() for h in (reader.fieldnames or [])}
         required = {'subno','contrno','transdate','tag_agent_id',
                     'tag_paydesk' if source == 'locking' else 'tag_pay_desk'}
-        required |= {'com_class','rental_vat'} if source == 'sales' else ({'flag'} if source == 'migration' else set())
+        required |= {'com_class','rental_vat'} if source == 'sales' else ({'transaction_type'} if source == 'locking' else set())
         if not required <= headers:
             raise Problem(name + ' is missing columns: ' + ', '.join(sorted(required - headers)))
         result = {'id':secrets.token_hex(8),'file':name,'at':dt.datetime.now(TZ).isoformat(),
@@ -208,7 +210,7 @@ def import_csv(state, files, actor):
             username = row['tag_agent_id'].upper()
             # File and CSV row locate the exact transaction without storing subscriber IDs.
             locator = {'row': index, 'date': row.get('transdate','')[:32],
-                       'agent': username, 'activity': (row.get('flag') or row.get('com_class') or source)[:64]}
+                       'agent': username, 'activity': (row.get('transaction_type') or row.get('com_class') or source)[:64]}
             if not username:
                 locator['agent'] = '(blank TAG_AGENT_ID)'
             if username not in state['users']:
@@ -225,13 +227,15 @@ def import_csv(state, files, actor):
                         raise Problem('Unknown sales segment.')
                     category = 'POST' if segment in ('Postpaid Voice','Family') else 'BB'
                     rental = money(row['rental_vat'])
-                elif source == 'migration':
-                    segment = row['flag'].capitalize()
-                    if segment not in ('Migration','Upgrade'):
-                        raise Problem('Unknown migration/upgrade flag.')
-                    category = segment
                 elif source == 'locking':
-                    segment = category = 'Locking'
+                    transaction_type = ' '.join(row['transaction_type'].casefold().split())
+                    activity = {'tls plan mvpp': 'Migration',
+                                'tls plan upgrade': 'Upgrade',
+                                'tls plan locking': 'Locking'}
+                    category = activity.get(transaction_type)
+                    if category is None:
+                        raise Problem('Unknown transaction_type in Locking report.')
+                    segment = category
                 else:
                     segment, category = 'Family', 'POST'
                     # TO_RENTAL is not documented as VAT-inclusive. Do not guess.
