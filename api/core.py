@@ -246,10 +246,6 @@ def import_csv(state, files, actor):
                 result['unknown_agents'] += 1
                 result['issues'].append({**locator,'reason':'Missing TAG_AGENT_ID' if not username else 'Unknown TAG_AGENT_ID'})
                 continue
-            if fallback_used:
-                result['fallback_enterby'] = result.get('fallback_enterby',0) + 1
-                result['issues'].append({**locator,
-                    'reason':'Missing TAG_AGENT_ID — attributed using ENTERBY (verified against monthly target sheet and approved MUL usernames)'})
             try:
                 transaction_date = date(row['transdate'])
                 segment, category, rental = None, None, None
@@ -278,6 +274,10 @@ def import_csv(state, files, actor):
                     segment, category = 'Family', 'POST'
                     # TO_RENTAL is not documented as VAT-inclusive. Do not guess.
                     rental = None
+                if fallback_used:
+                    result['fallback_enterby'] = result.get('fallback_enterby',0) + 1
+                    result['issues'].append({**locator,
+                        'reason':'Missing TAG_AGENT_ID — attributed using ENTERBY (verified against monthly target sheet and approved MUL usernames)'})
                 # Exact normalized duplicates are skipped, including within the same batch.
                 fingerprint = hashlib.sha256((source + json.dumps(row,sort_keys=True)).encode()).hexdigest()
                 if fingerprint in known:
