@@ -212,19 +212,44 @@ def import_csv(state, files, actor):
                 raise Problem('Maximum 20,000 rows per file.')
             row = {k.strip().lower(): (v or '').strip() for k,v in raw.items() if k}
             tag = row.get('tag_paydesk' if source == 'locking' else 'tag_pay_desk','')
-            if tag.casefold() != 'telesales':
+            tagged_username = row['tag_agent_id'].upper()
+            username = tagged_username
+            fallback_used = False
+            # Only the Migration report may recover missing TAG_AGENT_ID.
+            # ENTERBY is eligible only when listed in that month's uploaded
+            # target sheet AND in the administrator-approved MUL TABS list.
+            # Never override a populated tag or a non-Telesales channel.
+            if source == 'migration' and not tagged_username and (
+                    tag.casefold() == 'telesales' or
+                    (not tag and row.get('pay_desk','').casefold() == 'tls')):
+                candidate = row.get('enterby','').upper()
+                try:
+                    target_month = date(row['transdate'])[:7]
+                except Problem:
+                    target_month = ''
+                if (candidate in state.get('targets',{}).get(target_month,{}) and
+                        candidate in state['users'] and
+                        candidate in state.get('mul_allowlist',mul_allowlist.DEFAULT)):
+                    username = candidate
+                    fallback_used = True
+            valid_channel = tag.casefold() == 'telesales' or (
+                fallback_used and not tag and row.get('pay_desk','').casefold() == 'tls')
+            if not valid_channel:
                 result['excluded'] += 1
                 continue
-            username = row['tag_agent_id'].upper()
             # File and CSV row locate the exact transaction without storing subscriber IDs.
             locator = {'row': index, 'date': row.get('transdate','')[:32],
-                       'agent': username, 'activity': (row.get('transaction_type') or row.get('com_class') or source)[:64]}
-            if not username:
-                locator['agent'] = '(blank TAG_AGENT_ID)'
+                       'agent': username or '(blank TAG_AGENT_ID)',
+                       'activity': (row.get('transaction_type') or row.get('flag') or
+                                    row.get('com_class') or source)[:64]}
             if username not in state['users']:
                 result['unknown_agents'] += 1
                 result['issues'].append({**locator,'reason':'Missing TAG_AGENT_ID' if not username else 'Unknown TAG_AGENT_ID'})
                 continue
+            if fallback_used:
+                result['fallback_enterby'] = result.get('fallback_enterby',0) + 1
+                result['issues'].append({**locator,
+                    'reason':'Missing TAG_AGENT_ID — attributed using ENTERBY (verified against monthly target sheet and approved MUL usernames)'})
             try:
                 transaction_date = date(row['transdate'])
                 segment, category, rental = None, None, None
