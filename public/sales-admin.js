@@ -21,16 +21,16 @@ function renderOfficialSales(){
  const list=officialSalesData.records.filter(e=>(officialSalesFilter==='all'||officialSalesFilter===e.status.toLowerCase())&&
  (!officialSalesTerm||[e.agent,e.agent_name,e.category,e.segment,e.file,e.date].join(' ').toLowerCase().includes(officialSalesTerm.toLowerCase())));
  root.innerHTML='<div class="verify-stat-grid">'+
- [['Counted',officialSalesData.active],['Excluded',officialSalesData.excluded],['Displayed',list.length]].map(([label,val])=>
+ [['Counted',officialSalesData.active],['Excluded',officialSalesData.excluded],['Held',officialSalesData.held||0],['Displayed',list.length]].map(([label,val])=>
  '<div class="verify-stat"><small>'+esc(label)+'</small><strong>'+fmt(val)+'</strong></div>').join('')+'</div>'+
  '<section class="panel"><div class="panel-head"><div><h2>Official transactions</h2><div class="sub">Current uploaded sales snapshot · '+esc(month)+'</div></div></div>'+
  '<div class="panel-body sales-manager-filters"><label>Filter transactions <select id="official-sales-status">'+
- ['all','counted','excluded'].map(v=>'<option value="'+v+'" '+(officialSalesFilter===v?'selected':'')+'>'+esc(v==='all'?'All transactions':v[0].toUpperCase()+v.slice(1))+'</option>').join('')+
+ ['all','counted','excluded','held'].map(v=>'<option value="'+v+'" '+(officialSalesFilter===v?'selected':'')+'>'+esc(v==='all'?'All transactions':v[0].toUpperCase()+v.slice(1))+'</option>').join('')+
  '</select></label><label>Agent, category, file or date<input id="official-sales-text" placeholder="Filter displayed rows…" value="'+esc(officialSalesTerm)+'"></label></div>'+
  '<div class="table-wrap"><table><thead><tr><th>Subscriber</th><th>Date</th><th>Agent</th><th>Category</th><th>Report</th><th>Points</th><th>Status</th><th>Action</th></tr></thead><tbody>'+
  (list.map(e=>'<tr><td><strong>'+esc(e.subscriber)+'</strong></td><td>'+esc(e.date)+'</td><td>'+esc(e.agent_name)+'<small class="sales-manager-agent">'+esc(e.agent)+'</small></td><td>'+esc(e.category)+'</td><td>'+esc(e.file)+'</td><td>'+(e.points==null?'Pending':fmt(e.points))+'</td>'+
- '<td>'+ (e.status==='Excluded'?'<span class="verify-status missing">Excluded</span><small class="sales-manager-agent" title="'+esc(e.reason)+'">'+esc(e.reason)+'</small>':'<span class="verify-status good">Counted</span>')+'</td><td>'+
- (state.me.role==='admin'?'<button type="button" class="btn '+(e.status==='Excluded'?'secondary':'ghost')+'" data-official-id="'+esc(e.id)+'" data-official-operation="'+(e.status==='Excluded'?'restore':'exclude')+'">'+(e.status==='Excluded'?'Restore':'Exclude')+'</button>':'Read only')+'</td></tr>').join('')||
+ '<td>'+ (e.status==='Excluded'?'<span class="verify-status missing">Excluded</span><small class="sales-manager-agent" title="'+esc(e.reason)+'">'+esc(e.reason)+'</small>':e.status==='Held'?'<span class="verify-status neutral">Held</span><small class="sales-manager-agent">Unapproved MUL username</small>':'<span class="verify-status good">Counted</span>')+'</td><td>'+
+ (e.status==='Held'?'Approve TABS username to count':state.me.role==='admin'?'<button type="button" class="btn '+(e.status==='Excluded'?'secondary':'ghost')+'" data-official-id="'+esc(e.id)+'" data-official-operation="'+(e.status==='Excluded'?'restore':'exclude')+'">'+(e.status==='Excluded'?'Restore':'Exclude')+'</button>':'Read only')+'</td></tr>').join('')||
  '<tr><td colspan="8" class="empty">No transactions match your filters.</td></tr>')+'</tbody></table></div></section>';
 }
 async function loadOfficialSales(){
