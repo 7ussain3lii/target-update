@@ -357,9 +357,10 @@ class Workflow(unittest.TestCase):
         self.assertEqual(sum(e['category']=='Migration' for e in state['entries']),1)
         self.assertEqual(summary['not_approved'],1)
         self.assertEqual(summary['excluded'],4)
-        self.assertEqual(len(summary['issues']),4)
-        self.assertTrue(all('Missing TAG_AGENT_ID' in e['reason'] for e in summary['issues']))
-        self.assertEqual([e['row'] for e in summary['issues']],[2,3,4,10])
+        fallback_warnings=[e for e in summary['issues'] if 'Missing TAG_AGENT_ID' in e['reason']]
+        self.assertEqual(len(fallback_warnings),4)
+        self.assertEqual([e['row'] for e in fallback_warnings],[2,3,4,10])
+        self.assertEqual(summary['invalid'],1)
         self.assertNotIn('36738226',json.dumps(summary))
         self.assertNotIn('36738226',json.dumps(state['entries']))
         # Confirm a separate month must have an uploaded target sheet.
