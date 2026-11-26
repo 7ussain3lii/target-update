@@ -332,6 +332,42 @@ class Workflow(unittest.TestCase):
             self.assertEqual(sum(x['duplicates'] for x in result),4)
             self.assertEqual(core.dashboard(state,state['users']['BF01465'],'2026-11')['agents'][0]['points']['POST'],2)
 
+    def test_migration_enterby_fallback_requires_monthly_targets_and_mul_approval(self):
+        state=core.seed();core.normalize_rules(state)
+        state['targets']['2026-11']={
+            'BF01452':{'MUL':150},'B000597':{'POST':18},'JSO1910':{'MUL':150}
+        }
+        report=('SUBNO,contrno,transdate,tag_agent_id,TAG_PAY_DESK,PAY_DESK,ENTERBY,FLAG\n'
+                '36738226,1,23-NOV-26,,,TLS,BF01452,Upgrade\n'
+                '37936842,2,02-NOV-26,,Telesales,TLS,BF01452,Upgrade\n'
+                '36649256,3,23-NOV-26,,,TLS,BF01452,Upgrade\n'
+                '99990001,4,23-NOV-26,,,TLS,B000597,Upgrade\n'
+                '99990002,5,23-NOV-26,,,TLS,NSO1893,Upgrade\n'
+                '99990003,6,23-NOV-26,,Portal,TLS,BF01452,Upgrade\n'
+                '99990004,7,23-NOV-26,,,PTL,BF01452,Upgrade\n'
+                '99990005,8,23-NOV-26,B000597,Telesales,TLS,BF01452,Upgrade\n'
+                '99990006,9,23-NOV-26,,,TLS,BF01452,Migration\n'
+                '99990007,10,23-NOV-26,,,TLS,BF01452,Locking\n')
+        result=core.import_csv(state,[{'name':'TLS_MIG_REPOERT.csv','content':report}],'B000884')
+        summary=result[0]
+        self.assertEqual(summary['fallback_enterby'],4)
+        self.assertEqual(len(state['entries']),4)
+        self.assertEqual({e['agent'] for e in state['entries']},{'BF01452'})
+        self.assertEqual(sum(e['category']=='Upgrade' for e in state['entries']),3)
+        self.assertEqual(sum(e['category']=='Migration' for e in state['entries']),1)
+        self.assertEqual(summary['not_approved'],1)
+        self.assertEqual(summary['excluded'],4)
+        self.assertEqual(len(summary['issues']),4)
+        self.assertTrue(all('Missing TAG_AGENT_ID' in e['reason'] for e in summary['issues']))
+        self.assertEqual([e['row'] for e in summary['issues']],[2,3,4,10])
+        self.assertNotIn('36738226',json.dumps(summary))
+        self.assertNotIn('36738226',json.dumps(state['entries']))
+        # Confirm a separate month must have an uploaded target sheet.
+        later='SUBNO,contrno,transdate,tag_agent_id,TAG_PAY_DESK,PAY_DESK,ENTERBY,FLAG\n99990008,11,01-DEC-26,,,TLS,BF01452,Upgrade\n'
+        with self.assertRaises(core.Problem):
+            core.import_csv(state,[{'name':'TLS_MIG_REPOERT.csv','content':later}],'B000884')
+        self.assertEqual(len(state['entries']),4)
+
     def test_four_file_import_recovers_unique_migration_report_sales(self):
         state=core.seed();core.normalize_rules(state)
         migrated=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,FLAG\n'
