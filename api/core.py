@@ -168,12 +168,13 @@ def preference(entry):
     # Otherwise keep the existing earliest-date / MUL activity precedence.
     return (0 if entry['source'] == 'sales' and entry['category'] == 'POST' else 1,
             entry['date'], 0 if entry['segment'] in ('Migration', 'Upgrade') else
-            1 if entry['segment'] == 'Locking' else 0)
+            1 if entry['segment'] == 'Locking' else 0,
+            1 if entry['source'] == 'migration' else 0)
 
 
 def import_csv(state, files, actor):
-    if not isinstance(files, list) or not 1 <= len(files) <= 3:
-        raise Problem('Select up to three CSV reports: Sales, Locking, and Family Change.')
+    if not isinstance(files, list) or not 1 <= len(files) <= 4:
+        raise Problem('Select up to four CSV reports: Sales, Locking, Migration, and Family Change.')
     if not os.environ.get('TARGET_SUBNO_HMAC_KEY'):
         raise Problem('Set TARGET_SUBNO_HMAC_KEY on the server before importing.', 503)
     # Each batch is a complete sales snapshot. Build it separately and publish
@@ -186,12 +187,10 @@ def import_csv(state, files, actor):
     names = [file.get('name') for file in files]
     if len(set(names)) != len(names):
         raise Problem('Each report can be uploaded only once per batch.')
-    if 'TLS_MIG_REPOERT.csv' in names:
-        raise Problem('TLS_MIG_REPOERT.csv is no longer required. Migration and Upgrade are now imported from TLS_LOCK_REPOERT.csv.')
     for file in files:
         name = file.get('name', '')
         sources = {'TLS_REPORT.csv':'sales', 'TLS_LOCK_REPOERT.csv':'locking',
-                   'TLS_FAM_CHANGE.csv':'family'}
+                   'TLS_MIG_REPOERT.csv':'migration','TLS_FAM_CHANGE.csv':'family'}
         if name not in sources:
             raise Problem('Unrecognized report: ' + str(name)[:100])
         source = sources[name]
@@ -199,7 +198,9 @@ def import_csv(state, files, actor):
         headers = {h.strip().lower() for h in (reader.fieldnames or [])}
         required = {'subno','contrno','transdate','tag_agent_id',
                     'tag_paydesk' if source == 'locking' else 'tag_pay_desk'}
-        required |= {'com_class','rental_vat'} if source == 'sales' else ({'transaction_type'} if source == 'locking' else set())
+        required |= ({'com_class','rental_vat'} if source == 'sales' else
+                     {'transaction_type'} if source == 'locking' else
+                     {'flag'} if source == 'migration' else set())
         if not required <= headers:
             raise Problem(name + ' is missing columns: ' + ', '.join(sorted(required - headers)))
         result = {'id':secrets.token_hex(8),'file':name,'at':dt.datetime.now(TZ).isoformat(),
@@ -243,6 +244,11 @@ def import_csv(state, files, actor):
                     if category is None:
                         raise Problem('Unknown transaction_type in Locking report.')
                     segment = category
+                elif source == 'migration':
+                    activity = row['flag'].strip().casefold()
+                    if activity not in ('migration','upgrade'):
+                        raise Problem('Unknown FLAG in Migration report.')
+                    segment = category = activity.title()
                 else:
                     segment, category = 'Family', 'POST'
                     # TO_RENTAL is not documented as VAT-inclusive. Do not guess.
@@ -283,7 +289,7 @@ def import_csv(state, files, actor):
         result['issues_total'] = len(result['issues'])
         result['issues'] = result['issues'][:500]
         summaries.append(result)
-    if not fresh_entries:
+    if not fresh_entries and not held_entries:
         raise Problem('No valid Telesales sales found in the new reports. Existing data was not changed.')
     old_count = len(state['entries'])
     state['entries'] = sales_management.split_import(state, fresh_entries)
