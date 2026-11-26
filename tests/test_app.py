@@ -332,6 +332,33 @@ class Workflow(unittest.TestCase):
             self.assertEqual(sum(x['duplicates'] for x in result),4)
             self.assertEqual(core.dashboard(state,state['users']['BF01465'],'2026-11')['agents'][0]['points']['POST'],2)
 
+    def test_four_file_import_recovers_unique_migration_report_sales(self):
+        state=core.seed();core.normalize_rules(state)
+        migrated=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,FLAG\n'
+                  '36738226,1,23-NOV-26,BF01452,Telesales,Upgrade\n'
+                  '11112222,2,23-NOV-26,BF01452,Telesales,Migration\n'
+                  '33334444,3,23-NOV-26,B000597,Telesales,Upgrade\n'
+                  '99998888,4,23-NOV-26,BF01452,Portal,Upgrade\n')
+        locking=('SUBNO,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n'
+                 '11112222,8,23-NOV-26,BF01452,Telesales,TLS Plan MVPP\n'
+                 '55556666,9,23-NOV-26,BF01452,Telesales,TLS Plan Locking\n')
+        files=[{'name':'TLS_LOCK_REPOERT.csv','content':locking},
+               {'name':'TLS_MIG_REPOERT.csv','content':migrated}]
+        reports=core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['entries']),3)
+        self.assertEqual(len(state['mul_held_entries']),1)
+        self.assertEqual([e['category'] for e in state['entries']].count('Upgrade'),1)
+        self.assertEqual(reports[1]['excluded'],1)
+        self.assertEqual(reports[1]['not_approved'],1)
+        self.assertEqual(sum(r['duplicates'] for r in reports),1)
+        self.assertEqual({e['source'] for e in state['entries'] if e['category']=='Migration'},{'locking'})
+        self.assertTrue(any(e['source']=='migration' and e['category']=='Upgrade' for e in state['entries']))
+        # Same result regardless of report order: Locking report wins identical-date ties.
+        core.import_csv(state,list(reversed(files)),'B000884')
+        self.assertEqual(len(state['entries']),3)
+        self.assertEqual({e['source'] for e in state['entries'] if e['category']=='Migration'},{'locking'})
+        self.assertEqual(len(state['mul_held_entries']),1)
+
     def test_mul_allowlist_blocks_unapproved_but_preserves_for_later(self):
         state=core.seed();core.normalize_rules(state)
         outsider='B000597'
