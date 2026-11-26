@@ -175,3 +175,29 @@ document.addEventListener('click',async e=>{
 refresh();
 // Refresh visible dashboards without interrupting data entry or open dialogs.
 setInterval(()=>{if(state&&!state.change_required&&view==='overview'&&!document.hidden&&!$('#modal').open&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName))refresh()},30000);
+
+
+// Administrator-maintained TABS usernames eligible for MUL scoring.
+const originalMulCampaignsPage=campaignsPage;
+campaignsPage=function(){
+ const current=state.mul_allowlist||[];
+ const rows=state.agents.filter(a=>a.role==='agent').sort((a,b)=>a.name.localeCompare(b.name));
+ const choices=rows.map(a=>'<label class="mul-allow-row"><input type="checkbox" name="mul-username" value="'+esc(a.username)+'" '+(current.includes(a.username)?'checked':'')+'><span><strong>'+esc(a.name)+'</strong> · '+esc(a.username)+'</span></label>').join('');
+ return '<section class="panel"><div class="panel-head"><div><h2>Approved MUL TABS usernames</h2><div class="sub">Only selected TAG_AGENT_ID values may receive Migration, Upgrade or Locking points.</div></div><span class="pill">'+current.length+' approved</span></div>'+
+ '<div class="panel-body"><p>Transactions from other usernames are held for review, not counted. This does not affect POST or BB, and changing monthly targets does not change this list.</p>'+
+ '<form id="mul-allowlist-form"><div class="mul-allow-grid">'+choices+'</div><div class="form-error" role="alert"></div><button class="btn" type="submit">Save approved usernames</button></form>'+
+ '<p class="sub">Currently held MUL transactions: '+fmt(state.mul_held_count||0)+' (for '+esc(month)+')</p></div></section>'+originalMulCampaignsPage();
+};
+document.addEventListener('submit',async e=>{
+ if(e.target.id!=='mul-allowlist-form')return;
+ e.preventDefault();e.stopImmediatePropagation();
+ const form=e.target;
+ const usernames=Array.from(form.querySelectorAll('input[name="mul-username"]:checked')).map(x=>x.value);
+ const error=form.querySelector('.form-error');
+ if(!usernames.length){error.textContent='Select at least one TABS username.';return;}
+ if(!confirm('Update the MUL eligible usernames? Existing official MUL achievements will be recalculated; unapproved transactions will be held for review.'))return;
+ const button=form.querySelector('[type="submit"]');button.disabled=true;
+ try{await api('mul-allowlist',{usernames});await refresh();toast('Approved MUL usernames updated; achievements recalculated.');}
+ catch(err){if(error.isConnected)error.textContent=err.message;else toast(err.message);}
+ finally{button.disabled=false;}
+},true);
