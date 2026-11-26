@@ -17,6 +17,7 @@ import time
 import targets_xlsx
 import verification
 import sales_management
+import mul_allowlist
 from decimal import Decimal, InvalidOperation
 
 TZ = dt.timezone(dt.timedelta(hours=3))
@@ -64,6 +65,7 @@ def seed():
                       'points':points,'effective':'2000-01-01','active':False})
     # Targets are copied as a template only. Workbook period is not inferred.
     return {'users': users, 'rules': rules, 'entries': [], 'imports': [], 'sessions': {},
+        'mul_allowlist': list(mul_allowlist.DEFAULT), 'mul_held_entries': [],
             'attempts': {}, 'targets': {}, 'audit': []}
 
 
@@ -178,6 +180,7 @@ def import_csv(state, files, actor):
     # only after validation; never merge with previously uploaded transactions.
     summaries = []
     fresh_entries = []
+    held_entries = []
     known = set()
     by_subno = {}
     names = [file.get('name') for file in files]
@@ -253,6 +256,12 @@ def import_csv(state, files, actor):
                 entry = {'id':fingerprint,'source':source,'agent':username,'date':transaction_date,
                          'segment':segment,'category':category,'rental':rental,'batch':result['id'],
                          'subno_key':match_key,'subno_enc':verification.encrypt(row['subno'])}
+                if not mul_allowlist.approved(state, entry):
+                    # Preserve unapproved MUL sales securely for later review.
+                    entry['points'] = score(entry, state['rules'])
+                    held_entries.append(entry)
+                    result['not_approved'] = result.get('not_approved', 0) + 1
+                    continue
                 previous = by_subno.get(match_key)
                 if previous:
                     result['duplicates'] += 1
@@ -278,6 +287,7 @@ def import_csv(state, files, actor):
         raise Problem('No valid Telesales sales found in the new reports. Existing data was not changed.')
     old_count = len(state['entries'])
     state['entries'] = sales_management.split_import(state, fresh_entries)
+    state['mul_held_entries'] = held_entries
     # Retain upload history for audit and undo; no historical sales are counted.
     for result in summaries:
         result['replaced_previous_sales'] = old_count
@@ -452,6 +462,8 @@ def dashboard(state, user, month):
     if can_view_all:
         backup = state.get('last_import_backup')
         result.update(rules=state['rules'], imports=state['imports'][:50],
+                      mul_allowlist=state.get('mul_allowlist',list(mul_allowlist.DEFAULT)),
+                      mul_held_count=sum(e.get('date','').startswith(month) for e in state.get('mul_held_entries',[])),
                       audit=state['audit'][-30:][::-1],
                       import_restore=({'id': backup['id'], 'at': backup['at'], 'files': backup['files']}
                                       if admin and backup else None))
@@ -513,16 +525,19 @@ def action(state, path, data, token):
         return sales_management.update(state,user,data,self_core()),200,None
     if user['role'] != 'admin':
         raise Problem('Administrator access required.',403)
+    if path == 'mul-allowlist':
+        return mul_allowlist.update(state,user,data.get('usernames'),self_core()),200,None
     if path == 'import':
         before_entries=copy.deepcopy(state['entries'])
         before_imports=copy.deepcopy(state['imports'])
         before_excluded=copy.deepcopy(state.get('excluded_entries',[]))
+        before_held=copy.deepcopy(state.get('mul_held_entries',[]))
         result = import_csv(state,data.get('files'),user['username'])
         state['last_import_backup']={
             'id':secrets.token_hex(8),'at':dt.datetime.now(TZ).isoformat(),
             'files':[r['file'] for r in result],
             'entries':before_entries,'imports':before_imports,
-            'excluded_entries':before_excluded}
+            'excluded_entries':before_excluded,'mul_held_entries':before_held}
     elif path == 'undo-import':
         backup=state.get('last_import_backup')
         if not backup or data.get('backup_id') != backup['id']:
@@ -532,6 +547,8 @@ def action(state, path, data, token):
         # Keep administrator exclusions intact across import undo.
         restored=backup.get('excluded_entries',[])
         state['entries']=sales_management.split_import(state,state['entries']+restored)
+        state['mul_held_entries']=backup.get('mul_held_entries',[])
+        mul_allowlist.reconcile(state, preference)
         state.pop('last_import_backup',None)
         result={'ok':True,'restored':True}
     elif path == 'targets-preview':
