@@ -44,14 +44,15 @@ def list_sales(state, user, args, core):
     batches={item.get('id'):item.get('file') for item in state.get('imports', [])}
     skipped=state.get('sale_exclusions', {})
     rows=[]
-    for sale, is_excluded in ([(e,False) for e in state.get('entries', [])] +
-                              [(e,True) for e in state.get('excluded_entries', [])]):
+    for sale, status in ([(e,'Counted') for e in state.get('entries', [])] +
+                         [(e,'Excluded') for e in state.get('excluded_entries', [])] +
+                         [(e,'Held') for e in state.get('mul_held_entries', [])]):
         if not sale.get('date','').startswith(month):
             continue
         if match and match!=sale.get('subno_key'):
             continue
         key=stable_id(sale)
-        note=skipped.get(key, {}) if is_excluded else {}
+        note=skipped.get(key, {}) if status=='Excluded' else {}
         rows.append({
           'id':key,'subscriber':core.verification.display(sale.get('subno_enc'),reveal),
           'agent':sale.get('agent'),
@@ -62,15 +63,16 @@ def list_sales(state, user, args, core):
               'sales':'TLS_REPORT.csv',
               'locking':'TLS_LOCK_REPOERT.csv','family':'TLS_FAM_CHANGE.csv'
           }.get(sale.get('source'),'Unknown')),
-          'status':'Excluded' if is_excluded else 'Counted',
-          'reason':note.get('reason','') if is_excluded else '',
-          'by':note.get('by','') if is_excluded else '',
-          'at':note.get('at','') if is_excluded else ''
+          'status':status,
+          'reason':('TABS username not approved for MUL' if status=='Held' else note.get('reason','')),
+          'by':note.get('by','') if status=='Excluded' else '',
+          'at':note.get('at','') if status=='Excluded' else ''
         })
     rows.sort(key=lambda r:(r['date'],r['agent'],r['category'],r['id']),reverse=True)
     return {'month':month,'records':rows,
             'active':sum(r['status']=='Counted' for r in rows),
-            'excluded':sum(r['status']=='Excluded' for r in rows)}
+            'excluded':sum(r['status']=='Excluded' for r in rows),
+            'held':sum(r['status']=='Held' for r in rows)}
 
 
 def update(state,user,data,core):
