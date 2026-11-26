@@ -94,7 +94,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(self.call(self.admin,'logout',{}, {'Origin':'https://other.example'})[0],403)
 
     def test_csv_points_duplicates_pending_and_recalculation(self):
-        state=core.seed();core.normalize_rules(state)
+        state=core.seed();state['mul_allowlist']=list(core.mul_allowlist.DEFAULT)+['BF01458','BF01492','BF01465','B000597'];core.normalize_rules(state)
         files=[{'name':'TLS_REPORT.csv','content':'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n1,2,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n2,3,01-NOV-26,BF01458,Portal,MBB,11\n3,4,01-NOV-26,UNKNOWN,Telesales,MBB,11\n4,5,01-NOV-26,BF01458,Telesales,FAMILY,33\n5,6,01-NOV-26,BF01458,Telesales,FIBER,16.463000\n'},
                {'name':'TLS_LOCK_REPOERT.csv','content':'SUBNO,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n6,7,01-NOV-26,BF01458,Telesales,TLS Plan MVPP\n'}]
         result=core.import_csv(state,files,'B000884')
@@ -114,7 +114,7 @@ class Workflow(unittest.TestCase):
         self.assertEqual(info['agents'][0]['points']['MUL'],2)
 
     def test_issues_identify_exact_csv_row_and_avoid_subscriber_ids(self):
-        state=core.seed();core.normalize_rules(state)
+        state=core.seed();state['mul_allowlist']=list(core.mul_allowlist.DEFAULT)+['BF01458','BF01492','BF01465','B000597'];core.normalize_rules(state)
         files=[{'name':'TLS_REPORT.csv','content':
             'SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
             '123456789,50,01-NOV-26,BF01458,Telesales,Postpaid_Voice,15\n'
@@ -303,7 +303,7 @@ class Workflow(unittest.TestCase):
         self.assertTrue(any(x['action']=='Official sale restored' for x in state['audit']))
 
     def test_post_sales_take_priority_over_upgrade_even_with_later_date(self):
-        state=core.seed();core.normalize_rules(state)
+        state=core.seed();state['mul_allowlist']=list(core.mul_allowlist.DEFAULT)+['BF01458','BF01492','BF01465','B000597'];core.normalize_rules(state)
         sales=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
                '10012847,1,08-NOV-26,BF01492,Telesales,Postpaid_Voice,9.5\n'
                '10012844,2,08-NOV-26,BF01465,Telesales,Postpaid_Voice,9.5\n'
@@ -332,8 +332,43 @@ class Workflow(unittest.TestCase):
             self.assertEqual(sum(x['duplicates'] for x in result),4)
             self.assertEqual(core.dashboard(state,state['users']['BF01465'],'2026-11')['agents'][0]['points']['POST'],2)
 
+    def test_mul_allowlist_blocks_unapproved_but_preserves_for_later(self):
+        state=core.seed();core.normalize_rules(state)
+        outsider='B000597'
+        report=('SUBNO,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n'
+                '11111111,1,01-NOV-26,JSO1910,Telesales,TLS Plan MVPP\n'
+                '22222222,2,01-NOV-26,B000597,Telesales,TLS Plan Upgrade\n')
+        post=('SUBNO,contrno,transdate,tag_agent_id,tag_pay_desk,com_class,rental_vat\n'
+              '33333333,3,01-NOV-26,B000597,Telesales,Postpaid_Voice,9.5\n')
+        files=[{'name':'TLS_LOCK_REPOERT.csv','content':report},
+               {'name':'TLS_REPORT.csv','content':post}]
+        result=core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['entries']),2)
+        self.assertEqual(len(state['mul_held_entries']),1)
+        self.assertEqual(result[0]['not_approved'],1)
+        self.assertEqual(state['mul_held_entries'][0]['agent'],outsider)
+        self.assertEqual(state['entries'][1]['category'],'POST')
+        self.assertEqual(core.dashboard(state,state['users'][outsider],'2026-11')['agents'][0]['points']['MUL'],0)
+        self.assertEqual(core.dashboard(state,state['users'][outsider],'2026-11')['agents'][0]['points']['POST'],1)
+        with self.assertRaises(core.Problem):
+            core.mul_allowlist.update(state,state['users'][outsider],[outsider],core)
+        with self.assertRaises(core.Problem):
+            core.mul_allowlist.update(state,{'role':'manager'},[outsider],core)
+        with self.assertRaises(core.Problem):
+            core.mul_allowlist.update(state,state['users']['B000884'],['UNKNOWN'],core)
+        added=core.mul_allowlist.update(state,state['users']['B000884'],list(core.mul_allowlist.DEFAULT)+[outsider],core)
+        self.assertEqual(added['held'],0)
+        self.assertEqual(len(state['entries']),3)
+        self.assertEqual(next(e['category'] for e in state['entries'] if e['agent']==outsider and e['source']=='locking'),'Upgrade')
+        removed=core.mul_allowlist.update(state,state['users']['B000884'],list(core.mul_allowlist.DEFAULT),core)
+        self.assertEqual(removed['held'],1)
+        core.import_csv(state,files,'B000884')
+        self.assertEqual(len(state['mul_held_entries']),1)
+        self.assertEqual(len(state['entries']),2)
+        self.assertTrue(any(x['action']=='Update approved MUL TABS usernames' for x in state['audit']))
+
     def test_subno_dedup_across_reports_dates_and_reuploads(self):
-        state=core.seed()
+        state=core.seed();state['mul_allowlist']=list(core.mul_allowlist.DEFAULT)+['BF01458','BF01492','BF01465','B000597']
         locking='subno,contrno,transdate,tag_agent_id,tag_paydesk,transaction_type\n111,1,01-NOV-26,BF01458,Telesales,TLS Plan MVPP\n222,2,03-NOV-26,BF01458,Telesales,TLS Plan Locking\n111,3,02-NOV-26,BF01458,Telesales,TLS Plan Locking\n222,4,02-NOV-26,BF01458,Telesales,TLS Plan Upgrade\n'
         files=[{'name':'TLS_LOCK_REPOERT.csv','content':locking}]
         results=core.import_csv(state,files,'B000884')
